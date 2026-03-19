@@ -109,6 +109,26 @@ flutter run -d chrome --web-port=8080
 flutter analyze
 ```
 
+## Deploiement Netlify
+
+Le projet est configure pour un deploiement Netlify via connexion GitHub.
+
+- Fichier de configuration: `netlify.toml`
+- Dossier publie par Netlify: `build/web`
+- Regle SPA: toutes les routes sont redirigees vers `index.html`
+
+Si vous connectez le depot a Netlify:
+
+1. Ouvrez les parametres du site Netlify.
+2. Verifiez que le dossier de publication est `build/web`.
+3. Verifiez que la commande de build vient bien du fichier `netlify.toml`.
+4. Lancez un nouveau deploy apres la connexion ou apres un push GitHub.
+
+Important:
+
+- Le dossier `build/` n'est pas versionne dans Git, donc il ne faut pas compter sur `build/web/_redirects` dans un deploy GitHub.
+- La regle de redirection doit exister dans le depot, ici via `web/_redirects` et `netlify.toml`.
+
 ## Notes importantes
 
 - L'ecran de connexion est actuellement une UI simple sans authentification reelle.
