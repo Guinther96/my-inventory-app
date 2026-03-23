@@ -5,6 +5,7 @@ import '../../services/user_profile_service.dart';
 
 import '../../presentation/features/auth/screens/change_password_screen.dart';
 import '../../presentation/features/auth/screens/confirm_email_screen.dart';
+import '../../presentation/features/auth/screens/forgot_password_screen.dart';
 import '../../presentation/features/auth/screens/login_screen.dart';
 import '../../presentation/features/auth/screens/splash_screen.dart';
 import '../../presentation/features/dashboard/screens/dashboard_screen.dart';
@@ -31,6 +32,7 @@ final appRouter = GoRouter(
     final isSplashRoute = state.matchedLocation == '/splash';
     final isChangePasswordRoute = state.matchedLocation == '/change-password';
     final isConfirmEmailRoute = state.matchedLocation == '/confirm-email';
+    final isForgotPasswordRoute = state.matchedLocation == '/forgot-password';
 
     if (isSplashRoute) {
       return null;
@@ -40,7 +42,14 @@ final appRouter = GoRouter(
       return null;
     }
 
-    if (!isLoggedIn && !isLoginRoute && !isConfirmEmailRoute) {
+    if (isForgotPasswordRoute) {
+      return null;
+    }
+
+    if (!isLoggedIn &&
+        !isLoginRoute &&
+        !isConfirmEmailRoute &&
+        !isForgotPasswordRoute) {
       return '/login';
     }
 
@@ -68,6 +77,12 @@ final appRouter = GoRouter(
   routes: [
     GoRoute(path: '/splash', builder: (context, state) => const SplashScreen()),
     GoRoute(path: '/login', builder: (context, state) => const LoginScreen()),
+    GoRoute(
+      path: '/forgot-password',
+      builder: (context, state) => ForgotPasswordScreen(
+        initialEmail: state.uri.queryParameters['email'] ?? '',
+      ),
+    ),
     GoRoute(
       path: '/confirm-email',
       builder: (context, state) => ConfirmEmailScreen(

@@ -63,6 +63,16 @@ class _InventoryAppState extends State<InventoryApp> {
     final event = authState.event;
     final session = authState.session;
 
+    if (event == AuthChangeEvent.passwordRecovery) {
+      if (session != null) {
+        _lastHandledAccessToken = session.accessToken;
+      }
+      if (mounted) {
+        appRouter.go('/change-password');
+      }
+      return;
+    }
+
     if (session == null) {
       _lastHandledAccessToken = null;
       _userProfileProvider.clear();

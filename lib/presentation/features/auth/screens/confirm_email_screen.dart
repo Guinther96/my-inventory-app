@@ -96,7 +96,7 @@ class _ConfirmEmailScreenState extends State<ConfirmEmailScreen> {
           ]
         : const <String>[
             '1. Ouvrez Gmail ou votre boite mail.',
-            '2. Recherchez le message de confirmation Supabase.',
+            '2. Recherchez le message de confirmation.',
             '3. Cliquez sur le lien pour valider le compte.',
             '4. Revenez ensuite sur l ecran de connexion.',
           ];

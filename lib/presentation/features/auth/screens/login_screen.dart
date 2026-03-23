@@ -26,8 +26,27 @@ class _LoginScreenState extends State<LoginScreen> {
   bool _isRegister = false;
   bool _isLoading = false;
   bool _isResendingConfirmation = false;
+  bool _isPasswordVisible = false;
   DateTime? _nextRegisterAttemptAt;
   _RegisterMode _registerMode = _RegisterMode.company;
+  bool _didLoadRouteEmail = false;
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+
+    if (_didLoadRouteEmail) {
+      return;
+    }
+
+    final routeState = GoRouterState.of(context);
+    final email = routeState.uri.queryParameters['email']?.trim() ?? '';
+    if (email.isNotEmpty && _emailController.text.trim().isEmpty) {
+      _emailController.text = email;
+    }
+
+    _didLoadRouteEmail = true;
+  }
 
   @override
   void dispose() {
@@ -180,9 +199,21 @@ class _LoginScreenState extends State<LoginScreen> {
                       const SizedBox(height: 12),
                       TextField(
                         controller: _passwordController,
-                        obscureText: true,
-                        decoration: const InputDecoration(
+                        obscureText: !_isPasswordVisible,
+                        decoration: InputDecoration(
                           labelText: 'Mot de passe',
+                          suffixIcon: IconButton(
+                            onPressed: () {
+                              setState(() {
+                                _isPasswordVisible = !_isPasswordVisible;
+                              });
+                            },
+                            icon: Icon(
+                              _isPasswordVisible
+                                  ? Icons.visibility_off_outlined
+                                  : Icons.visibility_outlined,
+                            ),
+                          ),
                         ),
                       ),
                       const SizedBox(height: 16),
@@ -198,6 +229,26 @@ class _LoginScreenState extends State<LoginScreen> {
                               : 'Se connecter',
                         ),
                       ),
+                      if (!_isRegister) ...[
+                        const SizedBox(height: 6),
+                        Align(
+                          alignment: Alignment.centerRight,
+                          child: TextButton(
+                            onPressed: _isLoading
+                                ? null
+                                : () {
+                                    final encodedEmail =
+                                        Uri.encodeQueryComponent(
+                                          _emailController.text.trim(),
+                                        );
+                                    context.go(
+                                      '/forgot-password?email=$encodedEmail',
+                                    );
+                                  },
+                            child: const Text('Mot de passe oublie ?'),
+                          ),
+                        ),
+                      ],
                       const SizedBox(height: 8),
                       TextButton(
                         onPressed: _isLoading
@@ -339,9 +390,7 @@ class _LoginScreenState extends State<LoginScreen> {
         return;
       }
 
-      if (_isRegister &&
-          (_isRateLimitMessage(message) ||
-              _isAlreadyRegisteredMessage(message))) {
+      if (_isRegister && _isAlreadyRegisteredMessage(message)) {
         setState(() {
           _isRegister = false;
         });

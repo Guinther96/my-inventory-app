@@ -43,6 +43,31 @@ class AuthService {
     }
   }
 
+  Future<void> sendPasswordResetEmail({required String email}) async {
+    _ensureSupabaseConfigured();
+
+    final normalizedEmail = email.trim().toLowerCase();
+    if (normalizedEmail.isEmpty) {
+      throw Exception('Email requis.');
+    }
+
+    try {
+      await _client.auth.resetPasswordForEmail(
+        normalizedEmail,
+        redirectTo: AppConstants.passwordResetRedirectUrl,
+      );
+    } on SocketException {
+      throw Exception(_networkErrorMessage());
+    } on AuthException catch (e) {
+      throw Exception(_readableAuthError(e));
+    } catch (e) {
+      if (e.toString().toLowerCase().contains('failed host lookup')) {
+        throw Exception(_networkErrorMessage());
+      }
+      rethrow;
+    }
+  }
+
   Future<void> signUpWithCompany({
     required String email,
     required String password,
@@ -56,6 +81,7 @@ class AuthService {
         email: email,
         password: password,
         data: {'name': companyName, 'account_type': 'company_owner'},
+        emailRedirectTo: AppConstants.emailConfirmationRedirectUrl,
       );
     } on SocketException {
       throw Exception(_networkErrorMessage());
@@ -109,6 +135,7 @@ class AuthService {
         email: email,
         password: password,
         data: {'account_type': 'staff'},
+        emailRedirectTo: AppConstants.emailConfirmationRedirectUrl,
       );
 
       if (authResponse.user == null) {
@@ -223,8 +250,13 @@ class AuthService {
     final message = error.message.trim();
     final lower = message.toLowerCase();
 
+    if (lower.contains('unexpected_failure') &&
+        lower.contains('error sending confirmation email')) {
+      return 'Supabase n\'arrive pas a envoyer l\'email de confirmation. Verifiez dans Supabase: Auth > Email (provider actif), SMTP configure, et URL de redirection autorisee.';
+    }
+
     if (_isEmailRateLimited(message)) {
-      return 'Trop de demandes email. Attendez quelques minutes, verifiez votre boite mail (spam inclus), puis essayez de vous connecter.';
+      return 'Envoi d email temporairement limite par le service. Cela peut concerner tout le projet (pas seulement votre compte). Attendez quelques minutes puis reessayez.';
     }
 
     if (lower.contains('user already registered')) {
@@ -233,6 +265,10 @@ class AuthService {
 
     if (lower.contains('invalid login credentials')) {
       return 'Identifiants invalides. Verifiez votre email et mot de passe, ou reinitialisez le mot de passe.';
+    }
+
+    if (lower.contains('error sending recovery email')) {
+      return 'Supabase n\'arrive pas a envoyer l\'email de reinitialisation. Verifiez dans Supabase: Auth > Email (provider actif), SMTP configure, et URL de redirection autorisee.';
     }
 
     if (lower.contains('email not confirmed')) {
@@ -257,9 +293,7 @@ class AuthService {
     required String password,
   }) async {
     final message = error.message.toLowerCase();
-    final canRecover =
-        _isEmailRateLimited(message) ||
-        message.contains('user already registered');
+    final canRecover = message.contains('user already registered');
 
     if (!canRecover) {
       return false;
@@ -312,7 +346,11 @@ class AuthService {
     }
 
     try {
-      await _client.auth.resend(type: OtpType.signup, email: normalizedEmail);
+      await _client.auth.resend(
+        type: OtpType.signup,
+        email: normalizedEmail,
+        emailRedirectTo: AppConstants.emailConfirmationRedirectUrl,
+      );
     } on SocketException {
       throw Exception(_networkErrorMessage());
     } on AuthException catch (e) {
@@ -358,6 +396,7 @@ class AuthService {
         email: email,
         password: tempPassword,
         data: {'account_type': 'staff'},
+        emailRedirectTo: AppConstants.emailConfirmationRedirectUrl,
       );
 
       if (authResponse.user == null) {
