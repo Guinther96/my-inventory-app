@@ -58,11 +58,17 @@ class _LoginScreenState extends State<LoginScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final colorScheme = theme.colorScheme;
+    final isDark = theme.brightness == Brightness.dark;
+
     return Scaffold(
       body: Container(
-        decoration: const BoxDecoration(
+        decoration: BoxDecoration(
           gradient: LinearGradient(
-            colors: [Color(0xFFE9F6FA), Color(0xFFF5F8FC)],
+            colors: isDark
+                ? [const Color(0xFF0F1720), const Color(0xFF12263A)]
+                : [const Color(0xFFE9F6FA), const Color(0xFFF5F8FC)],
             begin: Alignment.topLeft,
             end: Alignment.bottomRight,
           ),
@@ -81,11 +87,13 @@ class _LoginScreenState extends State<LoginScreen> {
                 child: Container(
                   padding: const EdgeInsets.all(22),
                   decoration: BoxDecoration(
-                    color: Colors.white,
+                    color: colorScheme.surface,
                     borderRadius: BorderRadius.circular(28),
-                    boxShadow: const [
+                    boxShadow: [
                       BoxShadow(
-                        color: Color(0x180D1B2A),
+                        color: colorScheme.shadow.withValues(
+                          alpha: isDark ? 0.16 : 0.10,
+                        ),
                         blurRadius: 24,
                         offset: Offset(0, 14),
                       ),
@@ -95,9 +103,9 @@ class _LoginScreenState extends State<LoginScreen> {
                     mainAxisSize: MainAxisSize.min,
                     crossAxisAlignment: CrossAxisAlignment.stretch,
                     children: [
-                      const Icon(
+                      Icon(
                         Icons.inventory_2_rounded,
-                        color: Color(0xFF0C7EA5),
+                        color: colorScheme.primary,
                         size: 34,
                       ),
                       const SizedBox(height: 8),
@@ -119,32 +127,34 @@ class _LoginScreenState extends State<LoginScreen> {
                                   : 'Compte manager/seller: confirmez l email recu puis faites-vous activer par un manager.'
                             : 'Connectez-vous a votre espace de gestion.',
                         textAlign: TextAlign.center,
-                        style: const TextStyle(color: Color(0xFF617287)),
+                        style: theme.textTheme.bodyMedium?.copyWith(
+                          color: colorScheme.onSurfaceVariant,
+                        ),
                       ),
                       if (_isRegister) ...[
                         const SizedBox(height: 12),
                         Container(
                           padding: const EdgeInsets.all(12),
                           decoration: BoxDecoration(
-                            color: const Color(0xFFF5F8FC),
+                            color: colorScheme.surfaceContainerHigh,
                             borderRadius: BorderRadius.circular(14),
-                            border: Border.all(color: const Color(0xFFD8E3ED)),
+                            border: Border.all(color: colorScheme.outlineVariant),
                           ),
-                          child: const Row(
+                          child: Row(
                             crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
                               Icon(
                                 Icons.mark_email_unread_outlined,
                                 size: 18,
-                                color: Color(0xFF0C7EA5),
+                                color: colorScheme.primary,
                               ),
-                              SizedBox(width: 10),
+                              const SizedBox(width: 10),
                               Expanded(
                                 child: Text(
                                   'Un email de confirmation sera envoye apres l inscription. Vous devrez confirmer votre adresse email avant la premiere connexion.',
                                   style: TextStyle(
                                     fontSize: 12.5,
-                                    color: Color(0xFF41576B),
+                                    color: colorScheme.onSurfaceVariant,
                                   ),
                                 ),
                               ),

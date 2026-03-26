@@ -81,7 +81,7 @@ class _SalesScreenState extends State<SalesScreen> {
       // Affiche le drawer (menu latéral) uniquement sur mobile
       drawer: isDesktop ? null : const AppDrawer(),
       // Couleur de fond légère pour l'interface POS
-      backgroundColor: const Color(0xFFF3F6FB),
+      backgroundColor: Theme.of(context).scaffoldBackgroundColor,
       body: Row(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [

@@ -60,12 +60,15 @@ class CategoriesScreen extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final colorScheme = theme.colorScheme;
+
     final screenWidth = MediaQuery.of(context).size.width;
     final isDesktop = screenWidth > 950;
     final horizontalPadding = isDesktop ? 24.0 : 14.0;
 
     return Scaffold(
-      backgroundColor: const Color(0xFFF2F6FC),
+      backgroundColor: theme.scaffoldBackgroundColor,
       appBar: isDesktop ? null : AppBar(title: const Text('Categories')),
       drawer: isDesktop ? null : const AppDrawer(),
       body: Row(
@@ -116,11 +119,11 @@ class CategoriesScreen extends StatelessWidget {
                       Expanded(
                         child: Container(
                           decoration: BoxDecoration(
-                            color: Colors.white,
+                            color: colorScheme.surface,
                             borderRadius: BorderRadius.circular(24),
-                            boxShadow: const [
+                            boxShadow: [
                               BoxShadow(
-                                color: Color(0x100D1B2A),
+                                color: colorScheme.shadow.withValues(alpha: 0.08),
                                 blurRadius: 18,
                                 offset: Offset(0, 10),
                               ),
@@ -133,10 +136,10 @@ class CategoriesScreen extends StatelessWidget {
                                     child: Column(
                                       mainAxisSize: MainAxisSize.min,
                                       children: [
-                                        const Icon(
+                                        Icon(
                                           Icons.account_tree_outlined,
                                           size: 46,
-                                          color: Color(0xFF0C7EA5),
+                                          color: colorScheme.primary,
                                         ),
                                         const SizedBox(height: 10),
                                         Text(

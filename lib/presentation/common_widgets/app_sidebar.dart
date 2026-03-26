@@ -36,7 +36,7 @@ class AppSidebar extends StatelessWidget {
               child: ListTile(
                 contentPadding: EdgeInsets.zero,
                 title: Text(
-                  'StockPro',
+                  'BiznisPlus',
                   style: TextStyle(
                     fontSize: 24,
                     fontWeight: FontWeight.bold,

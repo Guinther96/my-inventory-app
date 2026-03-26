@@ -27,13 +27,16 @@ class _InventoryScreenState extends State<InventoryScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final colorScheme = theme.colorScheme;
+
     final screenWidth = MediaQuery.of(context).size.width;
     final isDesktop = screenWidth > 950;
     final horizontalPadding = isDesktop ? 24.0 : 14.0;
 
     return Scaffold(
       resizeToAvoidBottomInset: false,
-      backgroundColor: const Color(0xFFF2F6FC),
+      backgroundColor: theme.scaffoldBackgroundColor,
       appBar: isDesktop
           ? null
           : AppBar(title: const Text('Mouvements de stock')),
@@ -73,11 +76,11 @@ class _InventoryScreenState extends State<InventoryScreen> {
                       const SizedBox(height: 12),
                       Container(
                         decoration: BoxDecoration(
-                          color: Colors.white,
+                          color: colorScheme.surface,
                           borderRadius: BorderRadius.circular(24),
-                          boxShadow: const [
+                          boxShadow: [
                             BoxShadow(
-                              color: Color(0x100D1B2A),
+                              color: colorScheme.shadow.withValues(alpha: 0.08),
                               blurRadius: 18,
                               offset: Offset(0, 10),
                             ),
@@ -201,11 +204,11 @@ class _InventoryScreenState extends State<InventoryScreen> {
                       Expanded(
                         child: Container(
                           decoration: BoxDecoration(
-                            color: Colors.white,
+                            color: colorScheme.surface,
                             borderRadius: BorderRadius.circular(24),
-                            boxShadow: const [
+                            boxShadow: [
                               BoxShadow(
-                                color: Color(0x100D1B2A),
+                                color: colorScheme.shadow.withValues(alpha: 0.08),
                                 blurRadius: 18,
                                 offset: Offset(0, 10),
                               ),
@@ -233,17 +236,16 @@ class _InventoryScreenState extends State<InventoryScreen> {
 
                               return ListTile(
                                 leading: CircleAvatar(
-                                  backgroundColor:
-                                      movement.movementType == 'exit'
-                                      ? const Color(0xFFFFEBEE)
-                                      : const Color(0xFFE8F5E9),
+                                  backgroundColor: movement.movementType == 'exit'
+                                      ? colorScheme.errorContainer
+                                      : colorScheme.tertiaryContainer,
                                   child: Icon(
                                     movement.movementType == 'exit'
                                         ? Icons.arrow_upward
                                         : Icons.arrow_downward,
                                     color: movement.movementType == 'exit'
-                                        ? Colors.red
-                                        : Colors.green,
+                                        ? colorScheme.error
+                                        : colorScheme.tertiary,
                                   ),
                                 ),
                                 title: Text('$typeLabel - $productName'),
@@ -254,8 +256,8 @@ class _InventoryScreenState extends State<InventoryScreen> {
                                   '$sign${movement.quantity}',
                                   style: TextStyle(
                                     color: movement.movementType == 'exit'
-                                        ? Colors.red
-                                        : Colors.green,
+                                        ? colorScheme.error
+                                        : colorScheme.tertiary,
                                     fontWeight: FontWeight.bold,
                                   ),
                                 ),

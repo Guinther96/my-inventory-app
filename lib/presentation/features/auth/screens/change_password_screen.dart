@@ -58,8 +58,11 @@ class _ChangePasswordScreenState extends State<ChangePasswordScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final colorScheme = theme.colorScheme;
+
     return Scaffold(
-      backgroundColor: const Color(0xFFF2F6FC),
+      backgroundColor: theme.scaffoldBackgroundColor,
       appBar: AppBar(
         title: const Text('Changer le mot de passe'),
         automaticallyImplyLeading: false,
@@ -82,10 +85,10 @@ class _ChangePasswordScreenState extends State<ChangePasswordScreen> {
                     mainAxisSize: MainAxisSize.min,
                     crossAxisAlignment: CrossAxisAlignment.stretch,
                     children: [
-                      const Icon(
+                      Icon(
                         Icons.lock_reset,
                         size: 48,
-                        color: Color(0xFF0C7EA5),
+                        color: colorScheme.primary,
                       ),
                       const SizedBox(height: 16),
                       Text(
@@ -96,10 +99,13 @@ class _ChangePasswordScreenState extends State<ChangePasswordScreen> {
                         textAlign: TextAlign.center,
                       ),
                       const SizedBox(height: 8),
-                      const Text(
+                      Text(
                         'Choisissez un mot de passe securise d\'au moins 8 caracteres.',
                         textAlign: TextAlign.center,
-                        style: TextStyle(color: Colors.grey, fontSize: 13),
+                        style: theme.textTheme.bodySmall?.copyWith(
+                          color: colorScheme.onSurfaceVariant,
+                          fontSize: 13,
+                        ),
                       ),
                       const SizedBox(height: 24),
                       TextFormField(
@@ -157,7 +163,7 @@ class _ChangePasswordScreenState extends State<ChangePasswordScreen> {
                         const SizedBox(height: 12),
                         Text(
                           _error!,
-                          style: const TextStyle(color: Colors.red),
+                          style: TextStyle(color: colorScheme.error),
                           textAlign: TextAlign.center,
                         ),
                       ],
@@ -168,12 +174,12 @@ class _ChangePasswordScreenState extends State<ChangePasswordScreen> {
                           minimumSize: const Size.fromHeight(48),
                         ),
                         child: _isLoading
-                            ? const SizedBox(
+                            ? SizedBox(
                                 height: 20,
                                 width: 20,
                                 child: CircularProgressIndicator(
                                   strokeWidth: 2,
-                                  color: Colors.white,
+                                  color: colorScheme.onPrimary,
                                 ),
                               )
                             : const Text('Enregistrer'),

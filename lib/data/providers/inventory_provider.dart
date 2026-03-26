@@ -270,7 +270,7 @@ class InventoryProvider extends ChangeNotifier {
       0,
       StockMovement.fromJson({
         ...movementRaw,
-        'movement_type': movementRaw['movement_type'] ?? movementRaw['type'],
+        'movement_type': movementRaw['type'] ?? movementRaw['movement_type'],
       }),
     );
 

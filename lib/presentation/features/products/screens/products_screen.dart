@@ -23,12 +23,15 @@ class _ProductsScreenState extends State<ProductsScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final colorScheme = theme.colorScheme;
+
     final screenWidth = MediaQuery.of(context).size.width;
     final isDesktop = screenWidth > 950;
     final horizontalPadding = isDesktop ? 24.0 : 14.0;
 
     return Scaffold(
-      backgroundColor: const Color(0xFFF2F6FC),
+      backgroundColor: theme.scaffoldBackgroundColor,
       appBar: isDesktop ? null : AppBar(title: const Text('Produits')),
       drawer: isDesktop ? null : const AppDrawer(),
       body: Row(
@@ -76,11 +79,11 @@ class _ProductsScreenState extends State<ProductsScreen> {
                       Container(
                         padding: const EdgeInsets.all(14),
                         decoration: BoxDecoration(
-                          color: Colors.white,
+                          color: colorScheme.surface,
                           borderRadius: BorderRadius.circular(22),
-                          boxShadow: const [
+                          boxShadow: [
                             BoxShadow(
-                              color: Color(0x100D1B2A),
+                              color: colorScheme.shadow.withValues(alpha: 0.08),
                               blurRadius: 16,
                               offset: Offset(0, 8),
                             ),
@@ -94,7 +97,7 @@ class _ProductsScreenState extends State<ProductsScreen> {
                                   labelText: 'Rechercher un produit',
                                   prefixIcon: Icon(Icons.search),
                                   filled: true,
-                                  fillColor: Color(0xFFF6F8FB),
+                                  fillColor: null,
                                   border: OutlineInputBorder(
                                     borderSide: BorderSide.none,
                                   ),
@@ -111,13 +114,13 @@ class _ProductsScreenState extends State<ProductsScreen> {
                                 vertical: 8,
                               ),
                               decoration: BoxDecoration(
-                                color: const Color(0xFFE7F7FC),
+                                color: colorScheme.primaryContainer,
                                 borderRadius: BorderRadius.circular(999),
                               ),
                               child: Text(
                                 '${filtered.length}',
-                                style: const TextStyle(
-                                  color: Color(0xFF0C7EA5),
+                                style: TextStyle(
+                                  color: colorScheme.onPrimaryContainer,
                                   fontWeight: FontWeight.w700,
                                 ),
                               ),
@@ -129,11 +132,11 @@ class _ProductsScreenState extends State<ProductsScreen> {
                       Expanded(
                         child: Container(
                           decoration: BoxDecoration(
-                            color: Colors.white,
+                            color: colorScheme.surface,
                             borderRadius: BorderRadius.circular(24),
-                            boxShadow: const [
+                            boxShadow: [
                               BoxShadow(
-                                color: Color(0x100D1B2A),
+                                color: colorScheme.shadow.withValues(alpha: 0.08),
                                 blurRadius: 18,
                                 offset: Offset(0, 10),
                               ),

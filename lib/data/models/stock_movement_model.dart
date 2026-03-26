@@ -19,6 +19,24 @@ class StockMovement {
     required this.createdAt,
   });
 
+  static String _normalizeMovementType(dynamic rawType) {
+    final value = rawType?.toString().trim().toLowerCase() ?? '';
+
+    if (value == 'exit' || value == 'out') {
+      return 'exit';
+    }
+
+    if (value == 'entry' || value == 'in') {
+      return 'entry';
+    }
+
+    if (value == 'adjustment') {
+      return 'adjustment';
+    }
+
+    return 'entry';
+  }
+
   factory StockMovement.fromJson(Map<String, dynamic> json) {
     final createdAtRaw = json['created_at'] ?? json['createdAt'];
 
@@ -27,8 +45,10 @@ class StockMovement {
       productId: json['product_id']?.toString() ?? '',
       userId: json['user_id'],
       sellerId: json['seller_id']?.toString(),
-      movementType:
-          (json['movement_type'] ?? json['type'])?.toString() ?? 'entry',
+      // Prefer canonical SQL column `type` over legacy `movement_type`.
+      movementType: _normalizeMovementType(
+        json['type'] ?? json['movement_type'] ?? json['movementType'],
+      ),
       quantity: (json['quantity'] as num? ?? 0).toInt(),
       notes: json['notes'],
       createdAt:
@@ -63,7 +83,7 @@ class StockMovement {
       'product_id': productId,
       if (userId != null) 'user_id': userId,
       if (sellerId != null) 'seller_id': sellerId,
-      'type': movementType,
+      'type': _normalizeMovementType(movementType),
       'quantity': quantity,
       if (notes != null) 'notes': notes,
     };

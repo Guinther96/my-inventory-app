@@ -75,6 +75,9 @@ class _ConfirmEmailScreenState extends State<ConfirmEmailScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final colorScheme = theme.colorScheme;
+
     final title = widget.isConfirmed
         ? 'Email confirme'
         : 'Confirmez votre email';
@@ -102,7 +105,7 @@ class _ConfirmEmailScreenState extends State<ConfirmEmailScreen> {
           ];
 
     return Scaffold(
-      backgroundColor: const Color(0xFFF2F6FC),
+      backgroundColor: theme.scaffoldBackgroundColor,
       body: SafeArea(
         child: Center(
           child: SingleChildScrollView(
@@ -120,13 +123,13 @@ class _ConfirmEmailScreenState extends State<ConfirmEmailScreen> {
                     mainAxisSize: MainAxisSize.min,
                     crossAxisAlignment: CrossAxisAlignment.stretch,
                     children: [
-                      const CircleAvatar(
+                      CircleAvatar(
                         radius: 28,
-                        backgroundColor: Color(0x150C7EA5),
+                        backgroundColor: colorScheme.primaryContainer,
                         child: Icon(
                           Icons.mark_email_unread_outlined,
                           size: 30,
-                          color: Color(0xFF0C7EA5),
+                          color: colorScheme.primary,
                         ),
                       ),
                       const SizedBox(height: 18),
@@ -140,7 +143,10 @@ class _ConfirmEmailScreenState extends State<ConfirmEmailScreen> {
                       Text(
                         description,
                         textAlign: TextAlign.center,
-                        style: TextStyle(color: Color(0xFF617287), height: 1.4),
+                        style: theme.textTheme.bodyMedium?.copyWith(
+                          color: colorScheme.onSurfaceVariant,
+                          height: 1.4,
+                        ),
                       ),
                       const SizedBox(height: 18),
                       TextField(
@@ -155,9 +161,9 @@ class _ConfirmEmailScreenState extends State<ConfirmEmailScreen> {
                       Container(
                         padding: const EdgeInsets.all(14),
                         decoration: BoxDecoration(
-                          color: const Color(0xFFF9FBFD),
+                          color: colorScheme.surfaceContainerHigh,
                           borderRadius: BorderRadius.circular(16),
-                          border: Border.all(color: const Color(0xFFD8E3ED)),
+                          border: Border.all(color: colorScheme.outlineVariant),
                         ),
                         child: Column(
                           crossAxisAlignment: CrossAxisAlignment.start,
@@ -184,12 +190,12 @@ class _ConfirmEmailScreenState extends State<ConfirmEmailScreen> {
                         FilledButton.icon(
                           onPressed: _isSending ? null : _resendEmail,
                           icon: _isSending
-                              ? const SizedBox(
+                              ? SizedBox(
                                   height: 18,
                                   width: 18,
                                   child: CircularProgressIndicator(
                                     strokeWidth: 2,
-                                    color: Colors.white,
+                                    color: colorScheme.onPrimary,
                                   ),
                                 )
                               : const Icon(Icons.mark_email_read_outlined),

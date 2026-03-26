@@ -75,8 +75,11 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final colorScheme = theme.colorScheme;
+
     return Scaffold(
-      backgroundColor: const Color(0xFFF2F6FC),
+      backgroundColor: theme.scaffoldBackgroundColor,
       appBar: AppBar(title: const Text('Mot de passe oublie')),
       body: Center(
         child: SingleChildScrollView(
@@ -96,10 +99,10 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen> {
                     mainAxisSize: MainAxisSize.min,
                     crossAxisAlignment: CrossAxisAlignment.stretch,
                     children: [
-                      const Icon(
+                      Icon(
                         Icons.lock_reset_rounded,
                         size: 48,
-                        color: Color(0xFF0C7EA5),
+                        color: colorScheme.primary,
                       ),
                       const SizedBox(height: 16),
                       Text(
@@ -110,10 +113,13 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen> {
                         textAlign: TextAlign.center,
                       ),
                       const SizedBox(height: 8),
-                      const Text(
+                      Text(
                         'Saisissez votre email. Nous vous enverrons un lien pour definir un nouveau mot de passe.',
                         textAlign: TextAlign.center,
-                        style: TextStyle(color: Colors.grey, fontSize: 13),
+                        style: theme.textTheme.bodySmall?.copyWith(
+                          color: colorScheme.onSurfaceVariant,
+                          fontSize: 13,
+                        ),
                       ),
                       const SizedBox(height: 24),
                       TextFormField(
@@ -142,12 +148,12 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen> {
                           minimumSize: const Size.fromHeight(48),
                         ),
                         child: _isLoading
-                            ? const SizedBox(
+                            ? SizedBox(
                                 height: 20,
                                 width: 20,
                                 child: CircularProgressIndicator(
                                   strokeWidth: 2,
-                                  color: Colors.white,
+                                  color: colorScheme.onPrimary,
                                 ),
                               )
                             : const Text('Envoyer le lien'),

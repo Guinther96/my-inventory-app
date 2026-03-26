@@ -203,7 +203,7 @@ class _CreateServiceOrderScreenState extends State<CreateServiceOrderScreen> {
 
   Future<void> _showTicketDialog(ServiceOrder order) async {
     final bytes = _ticketService.buildEscPosTicket(
-      salonName: 'StockPro Beauty',
+      salonName: 'BiznisPlus Beauty',
       date: order.createdAt,
       clientName: order.clientName,
       items: order.items,
@@ -222,7 +222,7 @@ class _CreateServiceOrderScreenState extends State<CreateServiceOrderScreen> {
               crossAxisAlignment: CrossAxisAlignment.start,
               mainAxisSize: MainAxisSize.min,
               children: [
-                Text('Salon: StockPro Beauty'),
+                Text('Salon: BiznisPlus Beauty'),
                 Text(
                   'Date: ${DateFormat('dd/MM/yyyy HH:mm').format(order.createdAt)}',
                 ),

@@ -374,7 +374,7 @@ class _UserRolesScreenState extends State<UserRolesScreen> {
     }
 
     return Scaffold(
-      backgroundColor: const Color(0xFFF2F6FC),
+      backgroundColor: Theme.of(context).scaffoldBackgroundColor,
       appBar: isDesktop ? null : AppBar(title: const Text('Gestion des roles')),
       drawer: isDesktop ? null : const AppDrawer(),
       body: Row(
@@ -480,14 +480,16 @@ class _UserRolesScreenState extends State<UserRolesScreen> {
   }
 
   Widget _buildCreateStaffCard() {
+    final colorScheme = Theme.of(context).colorScheme;
+
     return Container(
       padding: const EdgeInsets.all(14),
       decoration: BoxDecoration(
-        color: Colors.white,
+        color: colorScheme.surface,
         borderRadius: BorderRadius.circular(18),
-        boxShadow: const [
+        boxShadow: [
           BoxShadow(
-            color: Color(0x0F0D1B2A),
+            color: colorScheme.shadow.withValues(alpha: 0.08),
             blurRadius: 16,
             offset: Offset(0, 8),
           ),
@@ -498,7 +500,7 @@ class _UserRolesScreenState extends State<UserRolesScreen> {
         children: [
           Row(
             children: [
-              const Icon(Icons.person_add, color: Color(0xFF0C7EA5), size: 20),
+              Icon(Icons.person_add, color: colorScheme.primary, size: 20),
               const SizedBox(width: 8),
               Text(
                 'Creer un compte employe',
@@ -533,9 +535,6 @@ class _UserRolesScreenState extends State<UserRolesScreen> {
                 label: Text(
                   _isCreatingStaff ? 'Creation...' : 'Generer le code',
                 ),
-                style: FilledButton.styleFrom(
-                  backgroundColor: const Color(0xFF0C7EA5),
-                ),
               ),
             ],
           ),
@@ -545,14 +544,16 @@ class _UserRolesScreenState extends State<UserRolesScreen> {
   }
 
   Widget _buildAddUserCard() {
+    final colorScheme = Theme.of(context).colorScheme;
+
     return Container(
       padding: const EdgeInsets.all(14),
       decoration: BoxDecoration(
-        color: Colors.white,
+        color: colorScheme.surface,
         borderRadius: BorderRadius.circular(18),
-        boxShadow: const [
+        boxShadow: [
           BoxShadow(
-            color: Color(0x0F0D1B2A),
+            color: colorScheme.shadow.withValues(alpha: 0.08),
             blurRadius: 16,
             offset: Offset(0, 8),
           ),
@@ -646,14 +647,16 @@ class _UserRoleTile extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final colorScheme = Theme.of(context).colorScheme;
+
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
       decoration: BoxDecoration(
-        color: Colors.white,
+        color: colorScheme.surface,
         borderRadius: BorderRadius.circular(18),
-        boxShadow: const [
+        boxShadow: [
           BoxShadow(
-            color: Color(0x0F0D1B2A),
+            color: colorScheme.shadow.withValues(alpha: 0.08),
             blurRadius: 16,
             offset: Offset(0, 8),
           ),
@@ -662,11 +665,11 @@ class _UserRoleTile extends StatelessWidget {
       child: Row(
         children: [
           CircleAvatar(
-            backgroundColor: const Color(0x150C7EA5),
+            backgroundColor: colorScheme.primaryContainer,
             child: Text(
               user.email.isNotEmpty ? user.email[0].toUpperCase() : '?',
-              style: const TextStyle(
-                color: Color(0xFF0C7EA5),
+              style: TextStyle(
+                color: colorScheme.onPrimaryContainer,
                 fontWeight: FontWeight.bold,
               ),
             ),

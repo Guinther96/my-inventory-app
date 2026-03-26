@@ -1,11 +1,11 @@
 {
-    "name": "StockPro",
-    "short_name": "StockPro",
+    "name": "BiznisPlus",
+    "short_name": "BiznisPlus",
     "start_url": ".",
     "display": "standalone",
     "background_color": "#E7F7FC",
     "theme_color": "#0C7EA5",
-    "description": "StockPro inventory management.",
+    "description": "BiznisPlus inventory management.",
     "orientation": "portrait-primary",
     "prefer_related_applications": false,
     "icons": [

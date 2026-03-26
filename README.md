@@ -1,6 +1,6 @@
-# StockPro - Documentation de l'application
+# BiznisPlus - Documentation de l'application
 
-StockPro est une application Flutter de gestion de stock en francais.
+BiznisPlus est une application Flutter de gestion de stock en francais.
 Elle permet de gerer des produits et categories, enregistrer les mouvements de stock, consulter des indicateurs, et reinitialiser les donnees de demonstration.
 
 ## Fonctionnalites principales

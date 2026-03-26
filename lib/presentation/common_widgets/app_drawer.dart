@@ -36,7 +36,7 @@ class AppDrawer extends StatelessWidget {
               color: Theme.of(context).colorScheme.primary,
             ),
             child: const Text(
-              'StockPro',
+              'BiznisPlus',
               style: TextStyle(color: Colors.white, fontSize: 24),
             ),
           ),

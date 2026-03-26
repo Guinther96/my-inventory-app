@@ -70,13 +70,15 @@ class SettingsScreen extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+
     final screenWidth = MediaQuery.of(context).size.width;
     final isDesktop = screenWidth > 950;
     final horizontalPadding = isDesktop ? 24.0 : 14.0;
     final isManager = context.watch<UserProfileProvider>().isManager;
 
     return Scaffold(
-      backgroundColor: const Color(0xFFF2F6FC),
+      backgroundColor: theme.scaffoldBackgroundColor,
       appBar: isDesktop ? null : AppBar(title: const Text('Parametres')),
       drawer: isDesktop ? null : const AppDrawer(),
       body: Row(
@@ -192,15 +194,17 @@ class _SettingsBlock extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final colorScheme = Theme.of(context).colorScheme;
+
     return Container(
       width: double.infinity,
       padding: const EdgeInsets.all(18),
       decoration: BoxDecoration(
-        color: Colors.white,
+        color: colorScheme.surface,
         borderRadius: BorderRadius.circular(24),
-        boxShadow: const [
+        boxShadow: [
           BoxShadow(
-            color: Color(0x100D1B2A),
+            color: colorScheme.shadow.withValues(alpha: 0.08),
             blurRadius: 18,
             offset: Offset(0, 10),
           ),

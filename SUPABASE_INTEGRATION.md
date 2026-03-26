@@ -1,6 +1,6 @@
-# StockPro SaaS Multi-Tenant (Flutter + Supabase)
+# BiznisPlus SaaS Multi-Tenant (Flutter + Supabase)
 
-This document defines the target SaaS architecture for StockPro so multiple companies can use the same app safely, with strict data isolation by `company_id`.
+This document defines the target SaaS architecture for BiznisPlus so multiple companies can use the same app safely, with strict data isolation by `company_id`.
 
 ## 1. SaaS Objective
 

@@ -1,7 +1,7 @@
 import 'package:flutter/foundation.dart';
 
 class AppConstants {
-  static const String appName = 'StockPro';
+  static const String appName = 'BiznisPlus';
 
   static const String supabaseUrl = 'https://ylzkzcogrmzcnwviktya.supabase.co';
   static const String supabaseAnonKey =

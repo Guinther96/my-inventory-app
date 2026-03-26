@@ -73,7 +73,7 @@ class InventorySupabaseService {
       // Compatibilite entre ancien champ movement_type et champ SQL type.
       return StockMovement.fromJson({
         ...raw,
-        'movement_type': raw['movement_type'] ?? raw['type'],
+        'movement_type': raw['type'] ?? raw['movement_type'],
       });
     }).toList();
   }

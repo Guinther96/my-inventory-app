@@ -251,13 +251,16 @@ class _DashboardScreenState extends State<DashboardScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final colorScheme = theme.colorScheme;
+
     final screenWidth = MediaQuery.of(context).size.width;
     final isDesktop = screenWidth > 950;
     final horizontalPadding = isDesktop ? 28.0 : 16.0;
     final isManager = context.watch<UserProfileProvider>().isManager;
 
     return Scaffold(
-      backgroundColor: const Color(0xFFF2F6FC),
+      backgroundColor: theme.scaffoldBackgroundColor,
       appBar: isDesktop ? null : AppBar(title: const Text('Tableau de bord')),
       drawer: isDesktop ? null : const AppDrawer(),
       body: Row(
@@ -370,13 +373,13 @@ class _DashboardScreenState extends State<DashboardScreen> {
                               vertical: 5,
                             ),
                             decoration: BoxDecoration(
-                              color: const Color(0xFFE7F7FC),
+                              color: colorScheme.primaryContainer,
                               borderRadius: BorderRadius.circular(999),
                             ),
                             child: Text(
                               '${recent.length}',
-                              style: const TextStyle(
-                                color: Color(0xFF0C7EA5),
+                              style: TextStyle(
+                                color: colorScheme.onPrimaryContainer,
                                 fontWeight: FontWeight.w700,
                               ),
                             ),
@@ -386,11 +389,11 @@ class _DashboardScreenState extends State<DashboardScreen> {
                       const SizedBox(height: 12),
                       Container(
                         decoration: BoxDecoration(
-                          color: Colors.white,
+                          color: colorScheme.surface,
                           borderRadius: BorderRadius.circular(24),
-                          boxShadow: const [
+                          boxShadow: [
                             BoxShadow(
-                              color: Color(0x100D1B2A),
+                              color: colorScheme.shadow.withValues(alpha: 0.08),
                               blurRadius: 18,
                               offset: Offset(0, 10),
                             ),
@@ -486,6 +489,9 @@ class _VisitsChartCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final colorScheme = theme.colorScheme;
+
     final totalVisits = points.fold<int>(0, (sum, p) => sum + p.visits);
     final maxVisits = points.fold<int>(0, (max, p) {
       return p.visits > max ? p.visits : max;
@@ -495,11 +501,11 @@ class _VisitsChartCard extends StatelessWidget {
       width: double.infinity,
       padding: const EdgeInsets.all(18),
       decoration: BoxDecoration(
-        color: Colors.white,
+        color: colorScheme.surface,
         borderRadius: BorderRadius.circular(24),
-        boxShadow: const [
+        boxShadow: [
           BoxShadow(
-            color: Color(0x100D1B2A),
+            color: colorScheme.shadow.withValues(alpha: 0.08),
             blurRadius: 18,
             offset: Offset(0, 10),
           ),
@@ -510,21 +516,21 @@ class _VisitsChartCard extends StatelessWidget {
         children: [
           Row(
             children: [
-              const Expanded(
+              Expanded(
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Text(
+                    const Text(
                       'Visites clients (services)',
                       style: TextStyle(
                         fontSize: 18,
                         fontWeight: FontWeight.w800,
                       ),
                     ),
-                    SizedBox(height: 4),
+                    const SizedBox(height: 4),
                     Text(
                       'Evolution des tickets services effectues.',
-                      style: TextStyle(color: Color(0xFF617287)),
+                      style: TextStyle(color: colorScheme.onSurfaceVariant),
                     ),
                   ],
                 ),
@@ -554,13 +560,13 @@ class _VisitsChartCard extends StatelessWidget {
                   vertical: 8,
                 ),
                 decoration: BoxDecoration(
-                  color: const Color(0xFFE8F9EE),
+                  color: colorScheme.tertiaryContainer,
                   borderRadius: BorderRadius.circular(999),
                 ),
                 child: Text(
                   '$totalVisits visites',
-                  style: const TextStyle(
-                    color: Color(0xFF15803D),
+                  style: TextStyle(
+                    color: colorScheme.onTertiaryContainer,
                     fontWeight: FontWeight.w800,
                   ),
                 ),
@@ -616,9 +622,9 @@ class _VisitsChartCard extends StatelessWidget {
                             children: [
                               Text(
                                 point.visits.toString(),
-                                style: const TextStyle(
+                                style: TextStyle(
                                   fontSize: 11,
-                                  color: Color(0xFF617287),
+                                  color: colorScheme.onSurfaceVariant,
                                 ),
                                 maxLines: 1,
                                 overflow: TextOverflow.ellipsis,
@@ -643,10 +649,10 @@ class _VisitsChartCard extends StatelessWidget {
                               const SizedBox(height: 8),
                               Text(
                                 point.label,
-                                style: const TextStyle(
+                                style: TextStyle(
                                   fontSize: 11,
                                   fontWeight: FontWeight.w700,
-                                  color: Color(0xFF425466),
+                                  color: colorScheme.onSurfaceVariant,
                                 ),
                                 maxLines: 1,
                                 overflow: TextOverflow.ellipsis,
@@ -680,6 +686,9 @@ class _SalesChartCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final colorScheme = theme.colorScheme;
+
     final total = points.fold<double>(0, (sum, p) => sum + p.amount);
     final maxAmount = points.fold<double>(0, (max, p) {
       return p.amount > max ? p.amount : max;
@@ -689,11 +698,11 @@ class _SalesChartCard extends StatelessWidget {
       width: double.infinity,
       padding: const EdgeInsets.all(18),
       decoration: BoxDecoration(
-        color: Colors.white,
+        color: colorScheme.surface,
         borderRadius: BorderRadius.circular(24),
-        boxShadow: const [
+        boxShadow: [
           BoxShadow(
-            color: Color(0x100D1B2A),
+            color: colorScheme.shadow.withValues(alpha: 0.08),
             blurRadius: 18,
             offset: Offset(0, 10),
           ),
@@ -704,21 +713,21 @@ class _SalesChartCard extends StatelessWidget {
         children: [
           Row(
             children: [
-              const Expanded(
+              Expanded(
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Text(
+                    const Text(
                       'Ventes',
                       style: TextStyle(
                         fontSize: 18,
                         fontWeight: FontWeight.w800,
                       ),
                     ),
-                    SizedBox(height: 4),
+                    const SizedBox(height: 4),
                     Text(
                       'Evolution quotidienne des sorties en Gourdes.',
-                      style: TextStyle(color: Color(0xFF617287)),
+                      style: TextStyle(color: colorScheme.onSurfaceVariant),
                     ),
                   ],
                 ),
@@ -748,13 +757,13 @@ class _SalesChartCard extends StatelessWidget {
                   vertical: 8,
                 ),
                 decoration: BoxDecoration(
-                  color: const Color(0xFFE7F7FC),
+                  color: colorScheme.primaryContainer,
                   borderRadius: BorderRadius.circular(999),
                 ),
                 child: Text(
                   '${_compact(total)} Gdes',
-                  style: const TextStyle(
-                    color: Color(0xFF0C7EA5),
+                  style: TextStyle(
+                    color: colorScheme.onPrimaryContainer,
                     fontWeight: FontWeight.w800,
                   ),
                 ),
@@ -787,9 +796,9 @@ class _SalesChartCard extends StatelessWidget {
                           children: [
                             Text(
                               point.amount <= 0 ? '0' : _compact(point.amount),
-                              style: const TextStyle(
+                              style: TextStyle(
                                 fontSize: 11,
-                                color: Color(0xFF617287),
+                                color: colorScheme.onSurfaceVariant,
                               ),
                               maxLines: 1,
                               overflow: TextOverflow.ellipsis,
@@ -814,10 +823,10 @@ class _SalesChartCard extends StatelessWidget {
                             const SizedBox(height: 8),
                             Text(
                               point.label,
-                              style: const TextStyle(
+                              style: TextStyle(
                                 fontSize: 11,
                                 fontWeight: FontWeight.w700,
-                                color: Color(0xFF425466),
+                                color: colorScheme.onSurfaceVariant,
                               ),
                               maxLines: 1,
                               overflow: TextOverflow.ellipsis,
@@ -862,22 +871,28 @@ class _PeriodChip extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final colorScheme = Theme.of(context).colorScheme;
+
     return InkWell(
       borderRadius: BorderRadius.circular(999),
       onTap: onTap,
       child: Container(
         padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 7),
         decoration: BoxDecoration(
-          color: selected ? const Color(0xFF0C7EA5) : const Color(0xFFF2F5FA),
+          color: selected
+              ? colorScheme.primary
+              : colorScheme.surfaceContainerHighest,
           borderRadius: BorderRadius.circular(999),
           border: Border.all(
-            color: selected ? const Color(0xFF0C7EA5) : const Color(0xFFD7E0EC),
+            color: selected ? colorScheme.primary : colorScheme.outlineVariant,
           ),
         ),
         child: Text(
           label,
           style: TextStyle(
-            color: selected ? Colors.white : const Color(0xFF425466),
+            color: selected
+                ? colorScheme.onPrimary
+                : colorScheme.onSurfaceVariant,
             fontWeight: FontWeight.w700,
             fontSize: 12,
           ),
@@ -1076,16 +1091,18 @@ class _ModernSummaryCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final colorScheme = Theme.of(context).colorScheme;
+
     return SizedBox(
       width: width,
       child: Container(
         decoration: BoxDecoration(
-          color: Colors.white,
+          color: colorScheme.surface,
           borderRadius: BorderRadius.circular(24),
           border: Border.all(color: accent.withValues(alpha: 0.18)),
-          boxShadow: const [
+          boxShadow: [
             BoxShadow(
-              color: Color(0x100D1B2A),
+              color: colorScheme.shadow.withValues(alpha: 0.08),
               blurRadius: 18,
               offset: Offset(0, 10),
             ),
@@ -1103,7 +1120,7 @@ class _ModernSummaryCard extends StatelessWidget {
                     child: Text(
                       title,
                       style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                        color: const Color(0xFF526173),
+                        color: colorScheme.onSurfaceVariant,
                       ),
                     ),
                   ),
@@ -1119,13 +1136,16 @@ class _ModernSummaryCard extends StatelessWidget {
                 value,
                 style: Theme.of(context).textTheme.headlineSmall?.copyWith(
                   fontWeight: FontWeight.w800,
-                  color: const Color(0xFF0F172A),
+                  color: colorScheme.onSurface,
                 ),
               ),
               const SizedBox(height: 6),
               Text(
                 subtitle,
-                style: const TextStyle(color: Color(0xFF617287), height: 1.35),
+                style: TextStyle(
+                  color: colorScheme.onSurfaceVariant,
+                  height: 1.35,
+                ),
               ),
             ],
           ),

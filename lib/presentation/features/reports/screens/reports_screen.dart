@@ -58,12 +58,15 @@ class _ReportsScreenState extends State<ReportsScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final colorScheme = theme.colorScheme;
+
     final screenWidth = MediaQuery.of(context).size.width;
     final isDesktop = screenWidth > 950;
     final horizontalPadding = isDesktop ? 24.0 : 14.0;
 
     return Scaffold(
-      backgroundColor: const Color(0xFFF2F6FC),
+      backgroundColor: theme.scaffoldBackgroundColor,
       appBar: isDesktop ? null : AppBar(title: const Text('Rapports')),
       drawer: isDesktop ? null : const AppDrawer(),
       body: Row(
@@ -133,11 +136,11 @@ class _ReportsScreenState extends State<ReportsScreen> {
                       const SizedBox(height: 10),
                       Container(
                         decoration: BoxDecoration(
-                          color: Colors.white,
+                          color: colorScheme.surface,
                           borderRadius: BorderRadius.circular(24),
-                          boxShadow: const [
+                          boxShadow: [
                             BoxShadow(
-                              color: Color(0x100D1B2A),
+                              color: colorScheme.shadow.withValues(alpha: 0.08),
                               blurRadius: 18,
                               offset: Offset(0, 10),
                             ),
@@ -183,11 +186,11 @@ class _ReportsScreenState extends State<ReportsScreen> {
                       const SizedBox(height: 10),
                       Container(
                         decoration: BoxDecoration(
-                          color: Colors.white,
+                          color: colorScheme.surface,
                           borderRadius: BorderRadius.circular(24),
-                          boxShadow: const [
+                          boxShadow: [
                             BoxShadow(
-                              color: Color(0x100D1B2A),
+                              color: colorScheme.shadow.withValues(alpha: 0.08),
                               blurRadius: 18,
                               offset: Offset(0, 10),
                             ),
@@ -208,9 +211,7 @@ class _ReportsScreenState extends State<ReportsScreen> {
                                   children: [
                                     Text(
                                       _clientsError!,
-                                      style: const TextStyle(
-                                        color: Colors.redAccent,
-                                      ),
+                                      style: TextStyle(color: colorScheme.error),
                                     ),
                                     const SizedBox(height: 10),
                                     OutlinedButton.icon(
