@@ -256,6 +256,10 @@ class InventoryProvider extends ChangeNotifier {
           updatedProductRaw['min_stock_alert'] ??
           updatedProductRaw['min_stock'],
     });
+    final dedupedProducts = _dedupeProducts(List<Product>.from(_products));
+    _products
+      ..clear()
+      ..addAll(dedupedProducts);
 
     final movementRaw = Map<String, dynamic>.from(result['movement'] as Map);
     _movements.insert(
@@ -310,17 +314,37 @@ class InventoryProvider extends ChangeNotifier {
   }
 
   List<Product> _dedupeProducts(List<Product> products) {
-    final byId = <String, Product>{};
+    final byBusinessKey = <String, Product>{};
+
+    Product pickLatest(Product current, Product incoming) {
+      return incoming.updatedAt.isAfter(current.updatedAt)
+          ? incoming
+          : current;
+    }
+
     for (final product in products) {
       if (product.id.isEmpty) {
         continue;
       }
-      byId[product.id] = product;
+
+      final businessKey = _productBusinessKey(product);
+      final existingByBusiness = byBusinessKey[businessKey];
+      byBusinessKey[businessKey] = existingByBusiness == null
+          ? product
+          : pickLatest(existingByBusiness, product);
     }
 
-    final unique = byId.values.toList()
+    final unique = byBusinessKey.values.toList()
       ..sort((a, b) => a.name.compareTo(b.name));
     return unique;
+  }
+
+  String _productBusinessKey(Product product) {
+    final barcode = (product.barcode ?? '').trim().toLowerCase();
+    if (barcode.isNotEmpty) {
+      return 'barcode:$barcode';
+    }
+    return 'name:${product.name.trim().toLowerCase()}';
   }
 
   Future<void> _seedDemoDataRemote(String tenantId) async {
