@@ -683,22 +683,30 @@ class _PosHeader extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final isDarkMode = Theme.of(context).brightness == Brightness.dark;
+    final primaryColor = Theme.of(context).primaryColor;
     return Container(
       width: double.infinity,
       padding: const EdgeInsets.all(20),
-      // Décoration: gradient bleu avec ombre
       decoration: BoxDecoration(
         borderRadius: BorderRadius.circular(28),
-        gradient: const LinearGradient(
-          colors: [Color(0xFF0C7EA5), Color(0xFF25B6C6)],
+        gradient: LinearGradient(
+          colors: isDarkMode
+              ? [
+                  Color.lerp(primaryColor, Color(0xFF000000), 0.3)!,
+                  Color.lerp(primaryColor, Color(0xFF000000), 0.1)!,
+                ]
+              : const [Color(0xFF0C7EA5), Color(0xFF25B6C6)],
           begin: Alignment.topLeft,
           end: Alignment.bottomRight,
         ),
-        boxShadow: const [
+        boxShadow: [
           BoxShadow(
-            color: Color(0x220C7EA5),
+            color: isDarkMode
+                ? primaryColor.withValues(alpha: 0.15)
+                : const Color(0x220C7EA5),
             blurRadius: 24,
-            offset: Offset(0, 12),
+            offset: const Offset(0, 12),
           ),
         ],
       ),
@@ -732,7 +740,7 @@ class _PosHeader extends StatelessWidget {
             title: 'Total ticket',
             value: '${cartTotal.toStringAsFixed(2)} Gdes',
             icon: Icons.payments,
-            accent: const Color(0xFFFFD05B),
+            accent: Theme.of(context).colorScheme.secondary,
           ),
         ],
       ),
@@ -747,11 +755,11 @@ class _HeaderIntro extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return const Column(
+    return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         // Titre principal
-        Text(
+        const Text(
           'Mode caisse',
           style: TextStyle(
             color: Colors.white,
@@ -759,11 +767,14 @@ class _HeaderIntro extends StatelessWidget {
             fontWeight: FontWeight.w800,
           ),
         ),
-        SizedBox(height: 8),
+        const SizedBox(height: 8),
         // Description secondaire
         Text(
           'Un ecran de vente rapide, visuel et adapte a votre gestion de stock.',
-          style: TextStyle(color: Color(0xDDF5FBFF), height: 1.45),
+          style: TextStyle(
+            color: Colors.white.withValues(alpha: 0.85),
+            height: 1.45,
+          ),
         ),
       ],
     );
@@ -823,7 +834,10 @@ class _HeaderMetric extends StatelessWidget {
               ),
               const SizedBox(height: 4),
               // Libellé petit et grisé
-              Text(title, style: const TextStyle(color: Color(0xDDF5FBFF))),
+              Text(
+                title,
+                style: TextStyle(color: Colors.white.withValues(alpha: 0.85)),
+              ),
             ],
           ),
         ],
@@ -873,16 +887,20 @@ class _TicketPanel extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    // Construit la carte avec background blanc et ombre
+    final isDarkMode = Theme.of(context).brightness == Brightness.dark;
     final card = Container(
       decoration: BoxDecoration(
-        color: Colors.white,
+        color: isDarkMode
+            ? Theme.of(context).scaffoldBackgroundColor
+            : Colors.white,
         borderRadius: BorderRadius.circular(28),
-        boxShadow: const [
+        boxShadow: [
           BoxShadow(
-            color: Color(0x140D1B2A),
+            color: isDarkMode
+                ? const Color(0x080D1B2A)
+                : const Color(0x140D1B2A),
             blurRadius: 18,
-            offset: Offset(0, 12),
+            offset: const Offset(0, 12),
           ),
         ],
       ),
@@ -923,11 +941,13 @@ class _TicketPanel extends StatelessWidget {
           Container(
             padding: const EdgeInsets.all(10),
             decoration: BoxDecoration(
-              color: const Color(0xFFEDF8FB),
+              color: Theme.of(context).primaryColor.withValues(alpha: 0.1),
               borderRadius: BorderRadius.circular(16),
             ),
-            // Icône POS distinctive
-            child: const Icon(Icons.point_of_sale, color: Color(0xFF0C7EA5)),
+            child: Icon(
+              Icons.point_of_sale,
+              color: Theme.of(context).primaryColor,
+            ),
           ),
           const SizedBox(width: 12),
           const Expanded(
@@ -949,13 +969,15 @@ class _TicketPanel extends StatelessWidget {
           Container(
             padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
             decoration: BoxDecoration(
-              color: const Color(0xFFFFF6DE),
+              color: Theme.of(
+                context,
+              ).colorScheme.secondary.withValues(alpha: 0.1),
               borderRadius: BorderRadius.circular(16),
             ),
             child: Text(
               '${cartTotal.toStringAsFixed(2)} Gdes',
-              style: const TextStyle(
-                color: Color(0xFFA56A00),
+              style: TextStyle(
+                color: Theme.of(context).colorScheme.secondary,
                 fontWeight: FontWeight.w800,
               ),
             ),
@@ -969,7 +991,7 @@ class _TicketPanel extends StatelessWidget {
             child: _TicketMiniStat(
               label: 'Lignes',
               value: entries.length.toString(),
-              color: const Color(0xFF0C7EA5),
+              color: Theme.of(context).primaryColor,
             ),
           ),
           const SizedBox(width: 10),
@@ -977,7 +999,7 @@ class _TicketPanel extends StatelessWidget {
             child: _TicketMiniStat(
               label: 'Articles',
               value: totalItems.toString(),
-              color: const Color(0xFF16A34A),
+              color: Theme.of(context).colorScheme.secondary,
             ),
           ),
         ],
@@ -1031,7 +1053,11 @@ class _TicketPanel extends StatelessWidget {
                     labelText: 'Note ticket',
                     hintText: 'Ex: vente comptoir, livraison, remise locale',
                     filled: true,
-                    fillColor: const Color(0xFFF6F8FB),
+                    fillColor:
+                        Theme.of(context).inputDecorationTheme.fillColor ??
+                        (Theme.of(context).brightness == Brightness.dark
+                            ? Colors.grey.withValues(alpha: 0.1)
+                            : const Color(0xFFF6F8FB)),
                     border: OutlineInputBorder(
                       borderRadius: BorderRadius.circular(16),
                       borderSide: BorderSide.none,
@@ -1042,7 +1068,9 @@ class _TicketPanel extends StatelessWidget {
                 Container(
                   padding: const EdgeInsets.all(16),
                   decoration: BoxDecoration(
-                    color: const Color(0xFF0F172A),
+                    color: Theme.of(context).brightness == Brightness.dark
+                        ? Theme.of(context).cardColor
+                        : const Color(0xFF0F172A),
                     borderRadius: BorderRadius.circular(22),
                   ),
                   child: Column(
@@ -1078,8 +1106,12 @@ class _TicketPanel extends StatelessWidget {
                             child: OutlinedButton(
                               onPressed: onClear,
                               style: OutlinedButton.styleFrom(
-                                side: const BorderSide(
-                                  color: Color(0x335D6B82),
+                                side: BorderSide(
+                                  color:
+                                      Theme.of(context).brightness ==
+                                          Brightness.dark
+                                      ? Colors.white24
+                                      : const Color(0x335D6B82),
                                 ),
                                 foregroundColor: Colors.white,
                                 padding: const EdgeInsets.symmetric(
@@ -1095,7 +1127,9 @@ class _TicketPanel extends StatelessWidget {
                             child: FilledButton.icon(
                               onPressed: onCheckout,
                               style: FilledButton.styleFrom(
-                                backgroundColor: const Color(0xFFFF8A3D),
+                                backgroundColor: Theme.of(
+                                  context,
+                                ).colorScheme.primary,
                                 foregroundColor: Colors.white,
                                 padding: const EdgeInsets.symmetric(
                                   vertical: 14,
@@ -1165,7 +1199,11 @@ class _TicketPanel extends StatelessWidget {
           labelText: 'Note ticket',
           hintText: 'Ex: vente comptoir, livraison, remise locale',
           filled: true,
-          fillColor: const Color(0xFFF6F8FB),
+          fillColor:
+              Theme.of(context).inputDecorationTheme.fillColor ??
+              (Theme.of(context).brightness == Brightness.dark
+                  ? Colors.grey.withValues(alpha: 0.1)
+                  : const Color(0xFFF6F8FB)),
           border: OutlineInputBorder(
             borderRadius: BorderRadius.circular(16),
             borderSide: BorderSide.none,
@@ -1176,7 +1214,9 @@ class _TicketPanel extends StatelessWidget {
       Container(
         padding: const EdgeInsets.all(16),
         decoration: BoxDecoration(
-          color: const Color(0xFF0F172A),
+          color: Theme.of(context).brightness == Brightness.dark
+              ? Theme.of(context).cardColor
+              : const Color(0xFF0F172A),
           borderRadius: BorderRadius.circular(22),
         ),
         child: Column(
@@ -1212,7 +1252,11 @@ class _TicketPanel extends StatelessWidget {
                   child: OutlinedButton(
                     onPressed: onClear,
                     style: OutlinedButton.styleFrom(
-                      side: const BorderSide(color: Color(0x335D6B82)),
+                      side: BorderSide(
+                        color: Theme.of(context).brightness == Brightness.dark
+                            ? Colors.white24
+                            : const Color(0x335D6B82),
+                      ),
                       foregroundColor: Colors.white,
                       padding: const EdgeInsets.symmetric(vertical: 14),
                     ),
@@ -1225,7 +1269,7 @@ class _TicketPanel extends StatelessWidget {
                   child: FilledButton.icon(
                     onPressed: onCheckout,
                     style: FilledButton.styleFrom(
-                      backgroundColor: const Color(0xFFFF8A3D),
+                      backgroundColor: Theme.of(context).colorScheme.primary,
                       foregroundColor: Colors.white,
                       padding: const EdgeInsets.symmetric(vertical: 14),
                     ),
@@ -1286,7 +1330,14 @@ class _TicketMiniStat extends StatelessWidget {
             ),
           ),
           const SizedBox(height: 4),
-          Text(label, style: const TextStyle(color: Color(0xFF617287))),
+          Text(
+            label,
+            style: TextStyle(
+              color: Theme.of(
+                context,
+              ).textTheme.bodyMedium?.color?.withValues(alpha: 0.7),
+            ),
+          ),
         ],
       ),
     );
@@ -1306,9 +1357,15 @@ class _EmptyCartState extends StatelessWidget {
       width: double.infinity,
       padding: EdgeInsets.all(compact ? 18 : 24),
       decoration: BoxDecoration(
-        color: const Color(0xFFF7F9FC),
+        color: Theme.of(context).brightness == Brightness.dark
+            ? Theme.of(context).cardColor
+            : const Color(0xFFF7F9FC),
         borderRadius: BorderRadius.circular(22),
-        border: Border.all(color: const Color(0xFFDCE6F2)),
+        border: Border.all(
+          color: Theme.of(context).brightness == Brightness.dark
+              ? Colors.grey.withValues(alpha: 0.2)
+              : const Color(0xFFDCE6F2),
+        ),
       ),
       child: const Column(
         mainAxisSize: MainAxisSize.min,
@@ -1357,9 +1414,17 @@ class _CartEntryTile extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final isDarkMode = Theme.of(context).brightness == Brightness.dark;
     final borderColor = selected
-        ? const Color(0xFF26A7BF)
-        : const Color(0xFFDCE6F2);
+        ? Theme.of(context).primaryColor
+        : (isDarkMode
+              ? Colors.grey.withValues(alpha: 0.2)
+              : const Color(0xFFDCE6F2));
+    final bgColor = selected
+        ? Theme.of(context).primaryColor.withValues(alpha: 0.08)
+        : (isDarkMode
+              ? Colors.grey.withValues(alpha: 0.05)
+              : const Color(0xFFF9FBFD));
 
     return InkWell(
       borderRadius: BorderRadius.circular(22),
@@ -1368,7 +1433,7 @@ class _CartEntryTile extends StatelessWidget {
         duration: const Duration(milliseconds: 180),
         padding: const EdgeInsets.all(14),
         decoration: BoxDecoration(
-          color: selected ? const Color(0xFFF0FCFF) : const Color(0xFFF9FBFD),
+          color: bgColor,
           borderRadius: BorderRadius.circular(22),
           border: Border.all(color: borderColor, width: selected ? 1.6 : 1),
         ),
@@ -1395,7 +1460,11 @@ class _CartEntryTile extends StatelessWidget {
                       const SizedBox(height: 6),
                       Text(
                         '${entry.product.price.toStringAsFixed(2)} Gdes x ${entry.quantity}',
-                        style: const TextStyle(color: Color(0xFF617287)),
+                        style: TextStyle(
+                          color: Theme.of(
+                            context,
+                          ).textTheme.bodyMedium?.color?.withValues(alpha: 0.7),
+                        ),
                       ),
                     ],
                   ),
@@ -1426,10 +1495,12 @@ class _CartEntryTile extends StatelessWidget {
                 const Spacer(),
                 Text(
                   '${entry.lineTotal.toStringAsFixed(2)} Gdes',
-                  style: const TextStyle(
+                  style: TextStyle(
                     fontSize: 17,
                     fontWeight: FontWeight.w800,
-                    color: Color(0xFF0F172A),
+                    color: Theme.of(context).brightness == Brightness.dark
+                        ? Colors.white
+                        : const Color(0xFF0F172A),
                   ),
                 ),
               ],
@@ -1687,13 +1758,13 @@ class _CatalogToolbar extends StatelessWidget {
                   vertical: 10,
                 ),
                 decoration: BoxDecoration(
-                  color: const Color(0xFFEDF8FB),
+                  color: Theme.of(context).primaryColor.withValues(alpha: 0.1),
                   borderRadius: BorderRadius.circular(18),
                 ),
                 child: Text(
                   '$productsCount produits',
-                  style: const TextStyle(
-                    color: Color(0xFF0C7EA5),
+                  style: TextStyle(
+                    color: Theme.of(context).primaryColor,
                     fontWeight: FontWeight.w700,
                   ),
                 ),
@@ -1708,7 +1779,11 @@ class _CatalogToolbar extends StatelessWidget {
               hintText: 'Rechercher par nom, code-barres ou description',
               prefixIcon: const Icon(Icons.search),
               filled: true,
-              fillColor: const Color(0xFFF6F8FB),
+              fillColor:
+                  Theme.of(context).inputDecorationTheme.fillColor ??
+                  (Theme.of(context).brightness == Brightness.dark
+                      ? Colors.grey.withValues(alpha: 0.1)
+                      : const Color(0xFFF6F8FB)),
               border: OutlineInputBorder(
                 borderRadius: BorderRadius.circular(18),
                 borderSide: BorderSide.none,
@@ -1849,13 +1924,17 @@ class _ProductGrid extends StatelessWidget {
       child: Container(
         padding: const EdgeInsets.all(18),
         decoration: BoxDecoration(
-          color: Colors.white,
+          color: Theme.of(context).brightness == Brightness.dark
+              ? Theme.of(context).scaffoldBackgroundColor
+              : Colors.white,
           borderRadius: BorderRadius.circular(28),
-          boxShadow: const [
+          boxShadow: [
             BoxShadow(
-              color: Color(0x100D1B2A),
+              color: Theme.of(context).brightness == Brightness.dark
+                  ? const Color(0x080D1B2A)
+                  : const Color(0x100D1B2A),
               blurRadius: 18,
-              offset: Offset(0, 10),
+              offset: const Offset(0, 10),
             ),
           ],
         ),
@@ -1876,7 +1955,9 @@ class _EmptyCatalogState extends StatelessWidget {
       width: double.infinity,
       padding: const EdgeInsets.all(28),
       decoration: BoxDecoration(
-        color: Colors.white,
+        color: Theme.of(context).brightness == Brightness.dark
+            ? Theme.of(context).cardColor
+            : Colors.white,
         borderRadius: BorderRadius.circular(28),
       ),
       child: const Column(
@@ -1969,10 +2050,10 @@ class _ProductTile extends StatelessWidget {
                         ? 'Bas'
                         : 'OK',
                     color: isOutOfStock
-                        ? const Color(0xFFDC2626)
+                        ? Theme.of(context).colorScheme.error
                         : isLowStock
-                        ? const Color(0xFFD97706)
-                        : const Color(0xFF16A34A),
+                        ? Colors.orange
+                        : Colors.green,
                   ),
                 ],
               ),
@@ -2021,8 +2102,8 @@ class _ProductTile extends StatelessWidget {
                       onPressed: onAdd,
                       style: FilledButton.styleFrom(
                         backgroundColor: isOutOfStock
-                            ? const Color(0xFFCBD5E1)
-                            : const Color(0xFF26A7BF),
+                            ? Colors.grey.withValues(alpha: 0.5)
+                            : Theme.of(context).primaryColor,
                         foregroundColor: Colors.white,
                         padding: const EdgeInsets.symmetric(
                           horizontal: 12,
@@ -2141,28 +2222,39 @@ class _FallbackProductThumb extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    // Extrait la première lettre maiuscule du nom du produit (ou '?' par défaut)
     final initial = label.trim().isEmpty ? '?' : label.trim()[0].toUpperCase();
 
     return Container(
       width: size,
       height: size,
       decoration: BoxDecoration(
-        gradient: const LinearGradient(
-          colors: [Color(0xFFE8F7FB), Color(0xFFD5EEF4)],
+        gradient: LinearGradient(
+          colors: Theme.of(context).brightness == Brightness.dark
+              ? [
+                  Color.lerp(
+                    Theme.of(context).primaryColor,
+                    Color(0xFF000000),
+                    0.5,
+                  )!.withValues(alpha: 0.3),
+                  Color.lerp(
+                    Theme.of(context).primaryColor,
+                    Color(0xFF000000),
+                    0.7,
+                  )!.withValues(alpha: 0.2),
+                ]
+              : const [Color(0xFFE8F7FB), Color(0xFFD5EEF4)],
           begin: Alignment.topLeft,
           end: Alignment.bottomRight,
         ),
         borderRadius: BorderRadius.circular(18),
       ),
       alignment: Alignment.center,
-      // Affiche la lettre sous la forme d'une grande initiale
       child: Text(
         initial,
         style: TextStyle(
           fontSize: size * 0.34,
           fontWeight: FontWeight.w800,
-          color: const Color(0xFF0C7EA5),
+          color: Theme.of(context).primaryColor,
         ),
       ),
     );
@@ -2183,13 +2275,17 @@ class _RecentSalesPanel extends StatelessWidget {
       width: double.infinity,
       padding: const EdgeInsets.all(18),
       decoration: BoxDecoration(
-        color: Colors.white,
+        color: Theme.of(context).brightness == Brightness.dark
+            ? Theme.of(context).scaffoldBackgroundColor
+            : Colors.white,
         borderRadius: BorderRadius.circular(28),
-        boxShadow: const [
+        boxShadow: [
           BoxShadow(
-            color: Color(0x100D1B2A),
+            color: Theme.of(context).brightness == Brightness.dark
+                ? const Color(0x080D1B2A)
+                : const Color(0x100D1B2A),
             blurRadius: 18,
-            offset: Offset(0, 10),
+            offset: const Offset(0, 10),
           ),
         ],
       ),
@@ -2203,9 +2299,13 @@ class _RecentSalesPanel extends StatelessWidget {
           ),
           const SizedBox(height: 6),
           // Sous-titre
-          const Text(
+          Text(
             'Historique recent des tickets enregistres.',
-            style: TextStyle(color: Color(0xFF617287)),
+            style: TextStyle(
+              color: Theme.of(
+                context,
+              ).textTheme.bodyMedium?.color?.withValues(alpha: 0.7),
+            ),
           ),
           const SizedBox(height: 14),
           // Affiche message vide ou liste des ventes
@@ -2228,8 +2328,10 @@ class _RecentSalesPanel extends StatelessWidget {
                 return Row(
                   children: [
                     CircleAvatar(
-                      backgroundColor: const Color(0xFFEDF8FB),
-                      foregroundColor: const Color(0xFF0C7EA5),
+                      backgroundColor: Theme.of(
+                        context,
+                      ).primaryColor.withValues(alpha: 0.15),
+                      foregroundColor: Theme.of(context).primaryColor,
                       child: const Icon(Icons.receipt_long),
                     ),
                     const SizedBox(width: 12),
@@ -2251,9 +2353,11 @@ class _RecentSalesPanel extends StatelessWidget {
                     ),
                     Text(
                       '${price.toStringAsFixed(2)} Gdes',
-                      style: const TextStyle(
+                      style: TextStyle(
                         fontWeight: FontWeight.w800,
-                        color: Color(0xFF0F172A),
+                        color: Theme.of(context).brightness == Brightness.dark
+                            ? Colors.white
+                            : const Color(0xFF0F172A),
                       ),
                     ),
                   ],

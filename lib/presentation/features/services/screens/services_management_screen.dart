@@ -25,6 +25,7 @@ class _ServicesManagementScreenState extends State<ServicesManagementScreen> {
 
   bool _isLoading = true;
   bool _isSaving = false;
+  bool _recentOrdersExpanded = false;
   String? _error;
   List<Service> _services = const <Service>[];
   List<ServiceOrder> _recentOrders = const <ServiceOrder>[];
@@ -339,39 +340,67 @@ class _ServicesManagementScreenState extends State<ServicesManagementScreen> {
                     ),
                   if (isManager) ...[
                     const SizedBox(height: 8),
-                    Text(
-                      'Tickets clients effectues (services seller)',
-                      style: Theme.of(context).textTheme.titleLarge,
-                    ),
-                    const SizedBox(height: 8),
-                    if (_recentOrders.isEmpty)
-                      const Card(
-                        child: Padding(
-                          padding: EdgeInsets.all(12),
-                          child: Text('Aucun ticket service trouve.'),
+                    Card(
+                      child: ExpansionTile(
+                        key: const PageStorageKey<String>(
+                          'services_recent_orders_tile',
                         ),
-                      )
-                    else
-                      ..._recentOrders.map((order) {
-                        final servicesLabel = order.items.isEmpty
-                            ? 'Sans details services'
-                            : order.items
-                                  .map((item) => item.serviceName)
-                                  .join(', ');
+                        initiallyExpanded: _recentOrdersExpanded,
+                        onExpansionChanged: (expanded) {
+                          setState(() => _recentOrdersExpanded = expanded);
+                        },
+                        tilePadding: const EdgeInsets.symmetric(
+                          horizontal: 16,
+                          vertical: 4,
+                        ),
+                        childrenPadding: const EdgeInsets.fromLTRB(
+                          12,
+                          0,
+                          12,
+                          12,
+                        ),
+                        title: Text(
+                          'Tickets clients effectues (services seller)',
+                          style: Theme.of(context).textTheme.titleLarge,
+                        ),
+                        subtitle: Text(
+                          _recentOrders.isEmpty
+                              ? 'Aucun ticket service trouve.'
+                              : '${_recentOrders.length} ticket(s) enregistre(s)',
+                        ),
+                        children: _recentOrders.isEmpty
+                            ? const [
+                                Padding(
+                                  padding: EdgeInsets.all(12),
+                                  child: Align(
+                                    alignment: Alignment.centerLeft,
+                                    child: Text('Aucun ticket service trouve.'),
+                                  ),
+                                ),
+                              ]
+                            : _recentOrders.map((order) {
+                                final servicesLabel = order.items.isEmpty
+                                    ? 'Sans details services'
+                                    : order.items
+                                          .map((item) => item.serviceName)
+                                          .join(', ');
 
-                        return Card(
-                          child: ListTile(
-                            title: Text(
-                              '${order.clientName} | ${order.totalAmount.toStringAsFixed(2)}',
-                            ),
-                            subtitle: Text(
-                              '${DateFormat('dd/MM/yyyy HH:mm').format(order.createdAt)} | Caissier: ${order.cashierName ?? '-'}\n$servicesLabel',
-                            ),
-                            isThreeLine: true,
-                            trailing: Text(order.ticketNumber ?? '-'),
-                          ),
-                        );
-                      }),
+                                return Card(
+                                  margin: const EdgeInsets.only(bottom: 8),
+                                  child: ListTile(
+                                    title: Text(
+                                      '${order.clientName} | ${order.totalAmount.toStringAsFixed(2)}',
+                                    ),
+                                    subtitle: Text(
+                                      '${DateFormat('dd/MM/yyyy HH:mm').format(order.createdAt)} | Caissier: ${order.cashierName ?? '-'}\n$servicesLabel',
+                                    ),
+                                    isThreeLine: true,
+                                    trailing: Text(order.ticketNumber ?? '-'),
+                                  ),
+                                );
+                              }).toList(),
+                      ),
+                    ),
                   ],
                   const SizedBox(height: 8),
                   Text(

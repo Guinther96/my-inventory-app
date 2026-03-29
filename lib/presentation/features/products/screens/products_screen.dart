@@ -136,7 +136,9 @@ class _ProductsScreenState extends State<ProductsScreen> {
                             borderRadius: BorderRadius.circular(24),
                             boxShadow: [
                               BoxShadow(
-                                color: colorScheme.shadow.withValues(alpha: 0.08),
+                                color: colorScheme.shadow.withValues(
+                                  alpha: 0.08,
+                                ),
                                 blurRadius: 18,
                                 offset: Offset(0, 10),
                               ),
@@ -415,9 +417,7 @@ class _ProductsScreenState extends State<ProductsScreen> {
 
                                   final now = DateTime.now();
                                   final productToSave = Product(
-                                    id:
-                                        product?.id ??
-                                        'prd-${now.microsecondsSinceEpoch}',
+                                    id: product?.id ?? '',
                                     categoryId: selectedCategoryId,
                                     name: name,
                                     description:

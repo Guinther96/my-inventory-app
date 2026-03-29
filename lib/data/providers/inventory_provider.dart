@@ -181,17 +181,9 @@ class InventoryProvider extends ChangeNotifier {
       isNew: isNew,
     );
 
-    final index = _products.indexWhere((p) => p.id == product.id);
-    if (index >= 0) {
-      _products[index] = saved.copyWith(updatedAt: DateTime.now());
-    } else {
-      final savedIndex = _products.indexWhere((p) => p.id == saved.id);
-      if (savedIndex >= 0) {
-        _products[savedIndex] = saved;
-      } else {
-        _products.add(saved);
-      }
-    }
+    _products.removeWhere((p) => p.id == product.id || p.id == saved.id);
+    _products.add(saved.copyWith(updatedAt: DateTime.now()));
+    _products.sort((a, b) => a.name.compareTo(b.name));
 
     notifyListeners();
   }
@@ -310,11 +302,25 @@ class InventoryProvider extends ChangeNotifier {
 
     _products
       ..clear()
-      ..addAll(await _inventoryService.fetchProducts(tenantId));
+      ..addAll(_dedupeProducts(await _inventoryService.fetchProducts(tenantId)));
 
     _movements
       ..clear()
       ..addAll(await _inventoryService.fetchMovements(tenantId));
+  }
+
+  List<Product> _dedupeProducts(List<Product> products) {
+    final byId = <String, Product>{};
+    for (final product in products) {
+      if (product.id.isEmpty) {
+        continue;
+      }
+      byId[product.id] = product;
+    }
+
+    final unique = byId.values.toList()
+      ..sort((a, b) => a.name.compareTo(b.name));
+    return unique;
   }
 
   Future<void> _seedDemoDataRemote(String tenantId) async {
