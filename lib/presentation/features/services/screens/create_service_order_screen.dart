@@ -285,6 +285,12 @@ class _CreateServiceOrderScreenState extends State<CreateServiceOrderScreen> {
   Widget build(BuildContext context) {
     final screenWidth = MediaQuery.of(context).size.width;
     final isDesktop = screenWidth >= 1120;
+    final selectedClientValue = _selectedClient == null
+        ? null
+        : _clients
+              .where((c) => c.id == _selectedClient!.id)
+              .cast<Client?>()
+              .firstWhere((_) => true, orElse: () => null);
 
     return Scaffold(
       appBar: isDesktop
@@ -330,7 +336,7 @@ class _CreateServiceOrderScreenState extends State<CreateServiceOrderScreen> {
                           child: Column(
                             children: [
                               DropdownButtonFormField<Client>(
-                                initialValue: _selectedClient,
+                                initialValue: selectedClientValue,
                                 decoration: const InputDecoration(
                                   labelText: 'Client existant (optionnel)',
                                 ),

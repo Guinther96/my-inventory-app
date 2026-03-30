@@ -94,12 +94,13 @@ class AppSidebar extends StatelessWidget {
               selected: currentRoute == '/beauty/reservations',
               onTap: () => context.go('/beauty/reservations'),
             ),
-            ListTile(
-              leading: const Icon(Icons.bar_chart),
-              title: const Text('Rapports'),
-              selected: currentRoute == '/reports',
-              onTap: () => context.go('/reports'),
-            ),
+            if (isManager)
+              ListTile(
+                leading: const Icon(Icons.bar_chart),
+                title: const Text('Rapports'),
+                selected: currentRoute == '/reports',
+                onTap: () => context.go('/reports'),
+              ),
             if (isManager)
               ListTile(
                 leading: const Icon(Icons.manage_accounts),

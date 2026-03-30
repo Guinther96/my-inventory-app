@@ -63,12 +63,8 @@ class AppTheme {
         backgroundColor: colorScheme.inverseSurface,
         contentTextStyle: TextStyle(color: colorScheme.onInverseSurface),
       ),
-      drawerTheme: DrawerThemeData(
-        backgroundColor: colorScheme.surface,
-      ),
-      dividerTheme: DividerThemeData(
-        color: colorScheme.outlineVariant,
-      ),
+      drawerTheme: DrawerThemeData(backgroundColor: colorScheme.surface),
+      dividerTheme: DividerThemeData(color: colorScheme.outlineVariant),
     );
   }
 }

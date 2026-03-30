@@ -123,7 +123,7 @@ class InventoryProvider extends ChangeNotifier {
       return;
     }
 
-    final isNew = !_isUuid(category.id);
+    final isNew = category.id.trim().isEmpty;
     final saved = await _inventoryService.upsertCategory(
       companyId: tenantId,
       category: category,
@@ -174,7 +174,7 @@ class InventoryProvider extends ChangeNotifier {
   Future<void> addOrUpdateProduct(Product product) async {
     final tenantId = await _resolveCompanyIdOrThrow();
 
-    final isNew = !_isUuid(product.id);
+    final isNew = product.id.trim().isEmpty;
     final saved = await _inventoryService.upsertProduct(
       companyId: tenantId,
       product: product,
@@ -256,17 +256,13 @@ class InventoryProvider extends ChangeNotifier {
           updatedProductRaw['min_stock_alert'] ??
           updatedProductRaw['min_stock'],
     });
-    final dedupedProducts = _dedupeProducts(List<Product>.from(_products));
-    _products
-      ..clear()
-      ..addAll(dedupedProducts);
 
     final movementRaw = Map<String, dynamic>.from(result['movement'] as Map);
     _movements.insert(
       0,
       StockMovement.fromJson({
         ...movementRaw,
-        'movement_type': movementRaw['type'] ?? movementRaw['movement_type'],
+        'movement_type': movementRaw['movement_type'] ?? movementRaw['type'],
       }),
     );
 
@@ -306,45 +302,11 @@ class InventoryProvider extends ChangeNotifier {
 
     _products
       ..clear()
-      ..addAll(_dedupeProducts(await _inventoryService.fetchProducts(tenantId)));
+      ..addAll(await _inventoryService.fetchProducts(tenantId));
 
     _movements
       ..clear()
       ..addAll(await _inventoryService.fetchMovements(tenantId));
-  }
-
-  List<Product> _dedupeProducts(List<Product> products) {
-    final byBusinessKey = <String, Product>{};
-
-    Product pickLatest(Product current, Product incoming) {
-      return incoming.updatedAt.isAfter(current.updatedAt)
-          ? incoming
-          : current;
-    }
-
-    for (final product in products) {
-      if (product.id.isEmpty) {
-        continue;
-      }
-
-      final businessKey = _productBusinessKey(product);
-      final existingByBusiness = byBusinessKey[businessKey];
-      byBusinessKey[businessKey] = existingByBusiness == null
-          ? product
-          : pickLatest(existingByBusiness, product);
-    }
-
-    final unique = byBusinessKey.values.toList()
-      ..sort((a, b) => a.name.compareTo(b.name));
-    return unique;
-  }
-
-  String _productBusinessKey(Product product) {
-    final barcode = (product.barcode ?? '').trim().toLowerCase();
-    if (barcode.isNotEmpty) {
-      return 'barcode:$barcode';
-    }
-    return 'name:${product.name.trim().toLowerCase()}';
   }
 
   Future<void> _seedDemoDataRemote(String tenantId) async {
@@ -418,12 +380,5 @@ class InventoryProvider extends ChangeNotifier {
     _products.clear();
     _categories.clear();
     _movements.clear();
-  }
-
-  bool _isUuid(String value) {
-    final uuidRegex = RegExp(
-      r'^[0-9a-fA-F]{8}\-[0-9a-fA-F]{4}\-[1-5][0-9a-fA-F]{3}\-[89abAB][0-9a-fA-F]{3}\-[0-9a-fA-F]{12}$',
-    );
-    return uuidRegex.hasMatch(value);
   }
 }

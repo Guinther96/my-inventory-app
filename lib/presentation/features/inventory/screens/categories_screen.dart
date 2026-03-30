@@ -123,7 +123,9 @@ class CategoriesScreen extends StatelessWidget {
                             borderRadius: BorderRadius.circular(24),
                             boxShadow: [
                               BoxShadow(
-                                color: colorScheme.shadow.withValues(alpha: 0.08),
+                                color: colorScheme.shadow.withValues(
+                                  alpha: 0.08,
+                                ),
                                 blurRadius: 18,
                                 offset: Offset(0, 10),
                               ),
@@ -318,6 +320,15 @@ class CategoriesScreen extends StatelessWidget {
                 padding: const EdgeInsets.fromLTRB(20, 18, 20, 16),
                 child: StatefulBuilder(
                   builder: (context, setDialogState) {
+                    final parentIds = parentCandidates
+                        .map((candidate) => candidate.id)
+                        .toSet();
+                    final selectedParentValue =
+                        selectedParentId != null &&
+                            parentIds.contains(selectedParentId)
+                        ? selectedParentId
+                        : null;
+
                     return Column(
                       mainAxisSize: MainAxisSize.min,
                       crossAxisAlignment: CrossAxisAlignment.start,
@@ -347,12 +358,12 @@ class CategoriesScreen extends StatelessWidget {
                               ),
                             ),
                             child: Text(
-                              'Parent: ${_categoryPathLabel(parentCategory!, allById)}',
+                              'Parent: ${_categoryPathLabel(parentCategory, allById)}',
                             ),
                           )
                         else
                           DropdownButtonFormField<String?>(
-                            value: selectedParentId,
+                            value: selectedParentValue,
                             decoration: const InputDecoration(
                               labelText: 'Categorie parent',
                             ),

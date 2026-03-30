@@ -41,7 +41,10 @@ class _ProductsScreenState extends State<ProductsScreen> {
           Expanded(
             child: Consumer<InventoryProvider>(
               builder: (context, inventory, _) {
-                final filtered = inventory.products.where((p) {
+                final dedupedProducts = _dedupeVisibleProducts(
+                  inventory.products,
+                );
+                final filtered = dedupedProducts.where((p) {
                   final q = _search.toLowerCase();
                   return p.name.toLowerCase().contains(q) ||
                       (p.barcode?.toLowerCase().contains(q) ?? false);
@@ -206,6 +209,26 @@ class _ProductsScreenState extends State<ProductsScreen> {
         ],
       ),
     );
+  }
+
+  List<Product> _dedupeVisibleProducts(List<Product> products) {
+    final byKey = <String, Product>{};
+
+    for (final product in products) {
+      final barcode = (product.barcode ?? '').trim().toLowerCase();
+      final category = (product.categoryId ?? '').trim().toLowerCase();
+      final name = product.name.trim().toLowerCase();
+      final key = barcode.isNotEmpty
+          ? 'barcode:$barcode'
+          : 'name:$name|category:$category';
+
+      final existing = byKey[key];
+      if (existing == null || product.updatedAt.isAfter(existing.updatedAt)) {
+        byKey[key] = product;
+      }
+    }
+
+    return byKey.values.toList();
   }
 
   Future<void> _openProductDialog(

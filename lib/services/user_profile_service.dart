@@ -193,9 +193,6 @@ class UserProfileService {
     if (route.startsWith('/beauty/orders/new')) {
       return true;
     }
-    if (route.startsWith('/reports')) {
-      return true;
-    }
     if (route.startsWith('/settings')) {
       return true;
     }

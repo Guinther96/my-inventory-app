@@ -92,8 +92,9 @@ class _SalesScreenState extends State<SalesScreen> {
             child: Consumer<InventoryProvider>(
               // Écoute les changements du provider d'inventaire
               builder: (context, inventory, _) {
-                // Récupère et trie tous les produits par nom
-                final allProducts = [...inventory.products]
+                // Déduplique les produits pour éviter les doublons visuels en caisse
+                // si des lignes identiques existent temporairement en base.
+                final allProducts = _dedupeCatalogProducts(inventory.products)
                   ..sort((a, b) => a.name.compareTo(b.name));
                 // Récupère et trie toutes les catégories par nom
                 final categories = [...inventory.categories]
@@ -352,6 +353,26 @@ class _SalesScreenState extends State<SalesScreen> {
       // Le produit passe le filtre s'il satisfait les deux conditions
       return categoryMatches && queryMatches;
     }).toList();
+  }
+
+  List<Product> _dedupeCatalogProducts(List<Product> products) {
+    final byKey = <String, Product>{};
+
+    for (final product in products) {
+      final barcode = (product.barcode ?? '').trim().toLowerCase();
+      final categoryKey = (product.categoryId ?? '').trim().toLowerCase();
+      final name = product.name.trim().toLowerCase();
+      final key = barcode.isNotEmpty
+          ? 'barcode:$barcode'
+          : 'name:$name|category:$categoryKey';
+
+      final existing = byKey[key];
+      if (existing == null || product.updatedAt.isAfter(existing.updatedAt)) {
+        byKey[key] = product;
+      }
+    }
+
+    return byKey.values.toList();
   }
 
   /// Convertit les lignes du panier en objets CartEntryData avec les données de produit

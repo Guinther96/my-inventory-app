@@ -208,7 +208,9 @@ class _InventoryScreenState extends State<InventoryScreen> {
                             borderRadius: BorderRadius.circular(24),
                             boxShadow: [
                               BoxShadow(
-                                color: colorScheme.shadow.withValues(alpha: 0.08),
+                                color: colorScheme.shadow.withValues(
+                                  alpha: 0.08,
+                                ),
                                 blurRadius: 18,
                                 offset: Offset(0, 10),
                               ),
@@ -236,7 +238,8 @@ class _InventoryScreenState extends State<InventoryScreen> {
 
                               return ListTile(
                                 leading: CircleAvatar(
-                                  backgroundColor: movement.movementType == 'exit'
+                                  backgroundColor:
+                                      movement.movementType == 'exit'
                                       ? colorScheme.errorContainer
                                       : colorScheme.tertiaryContainer,
                                   child: Icon(

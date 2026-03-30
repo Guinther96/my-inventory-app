@@ -99,14 +99,15 @@ class AppDrawer extends StatelessWidget {
               _goToRoute(context, '/beauty/reservations');
             },
           ),
-          ListTile(
-            leading: const Icon(Icons.bar_chart),
-            title: const Text('Rapports'),
-            selected: currentRoute == '/reports',
-            onTap: () {
-              _goToRoute(context, '/reports');
-            },
-          ),
+          if (isManager)
+            ListTile(
+              leading: const Icon(Icons.bar_chart),
+              title: const Text('Rapports'),
+              selected: currentRoute == '/reports',
+              onTap: () {
+                _goToRoute(context, '/reports');
+              },
+            ),
           if (isManager)
             ListTile(
               leading: const Icon(Icons.manage_accounts),

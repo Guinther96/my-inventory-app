@@ -215,6 +215,17 @@ class _ReservationScreenState extends State<ReservationScreen> {
   Widget build(BuildContext context) {
     final screenWidth = MediaQuery.of(context).size.width;
     final isDesktop = screenWidth >= 1120;
+    final selectedClientValue = _selectedClient == null
+        ? null
+        : _clients
+              .where((c) => c.id == _selectedClient!.id)
+              .cast<Client?>()
+              .firstWhere((_) => true, orElse: () => null);
+    final selectedServiceIdValue =
+        _selectedServiceId != null &&
+            _services.any((service) => service.id == _selectedServiceId)
+        ? _selectedServiceId
+        : null;
 
     return Scaffold(
       appBar: isDesktop
@@ -269,7 +280,7 @@ class _ReservationScreenState extends State<ReservationScreen> {
                                 ),
                                 const SizedBox(height: 12),
                                 DropdownButtonFormField<Client>(
-                                  initialValue: _selectedClient,
+                                  initialValue: selectedClientValue,
                                   decoration: const InputDecoration(
                                     labelText: 'Client existant (optionnel)',
                                   ),
@@ -309,6 +320,7 @@ class _ReservationScreenState extends State<ReservationScreen> {
                                 ),
                                 const SizedBox(height: 10),
                                 DropdownButtonFormField<String>(
+                                  initialValue: selectedServiceIdValue,
                                   decoration: const InputDecoration(
                                     labelText: 'Service demande',
                                   ),
