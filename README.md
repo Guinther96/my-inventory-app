@@ -103,6 +103,16 @@ Important: executez les commandes depuis le dossier racine du projet (celui qui 
 flutter run -d chrome --web-port=8080
 ```
 
+Si vous testez les emails Supabase (confirmation et mot de passe oublie), passez les URLs de redirection publiques:
+
+```bash
+flutter run -d chrome --web-port=8080 \
+	--dart-define=EMAIL_CONFIRM_REDIRECT_URL=https://votre-domaine/confirm-email?confirmed=1 \
+	--dart-define=PASSWORD_RESET_REDIRECT_URL=https://votre-domaine/change-password?recovery=1
+```
+
+Important: ces deux URLs doivent etre ajoutees dans Supabase > Auth > URL Configuration > Redirect URLs.
+
 ## Analyse statique
 
 ```bash

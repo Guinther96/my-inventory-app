@@ -1,0 +1,16 @@
+{
+	"version": "2.0.0",
+	"tasks": [
+		{
+			"label": "Android Build (local gradle cache)",
+			"type": "shell",
+			"command": "pwsh",
+			"args": [
+				"-NoProfile",
+				"-Command",
+				"& \"${workspaceFolder}\\\\build_android_local_cache.ps1\" -Mode Debug"
+			],
+			"isBackground": false
+		}
+	]
+}

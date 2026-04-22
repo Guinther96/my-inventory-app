@@ -1,6 +1,7 @@
 import 'dart:io';
 import 'dart:math';
 
+import 'package:flutter/foundation.dart' show debugPrint, kIsWeb;
 import 'package:my_inventory_app/core/constants/app_constants.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
@@ -43,6 +44,53 @@ class AuthService {
     }
   }
 
+  Future<void> completeAuthCallback({
+    String? callbackType,
+    String? tokenHash,
+    String? authCode,
+  }) async {
+    _ensureSupabaseConfigured();
+
+    final normalizedCode = authCode?.trim() ?? '';
+    if (normalizedCode.isNotEmpty) {
+      await _client.auth.exchangeCodeForSession(normalizedCode);
+      return;
+    }
+
+    final normalizedTokenHash = tokenHash?.trim() ?? '';
+    if (normalizedTokenHash.isEmpty) {
+      return;
+    }
+
+    final otpType = _otpTypeFromCallback(callbackType);
+    if (otpType == null) {
+      throw Exception(
+        'Type de lien de confirmation non reconnu: ${callbackType ?? 'inconnu'}.',
+      );
+    }
+
+    await _client.auth.verifyOTP(type: otpType, tokenHash: normalizedTokenHash);
+  }
+
+  OtpType? _otpTypeFromCallback(String? callbackType) {
+    switch ((callbackType ?? '').trim().toLowerCase()) {
+      case 'signup':
+        return OtpType.signup;
+      case 'invite':
+        return OtpType.invite;
+      case 'magiclink':
+        return OtpType.magiclink;
+      case 'recovery':
+        return OtpType.recovery;
+      case 'email':
+        return OtpType.email;
+      case 'email_change':
+        return OtpType.emailChange;
+      default:
+        return null;
+    }
+  }
+
   Future<void> sendPasswordResetEmail({required String email}) async {
     _ensureSupabaseConfigured();
 
@@ -51,10 +99,24 @@ class AuthService {
       throw Exception('Email requis.');
     }
 
+    final redirectUrl = AppConstants.passwordResetRedirectUrl;
+    if (kIsWeb && redirectUrl == null) {
+      debugPrint(
+        'WARNING: Password reset redirect URL is null on web. '
+        'Configure PASSWORD_RESET_REDIRECT_URL with a public allowed URL '
+        'in Supabase Auth URL Configuration.',
+      );
+      throw Exception(
+        'Configuration manquante: PASSWORD_RESET_REDIRECT_URL. '
+        'Ajoutez une URL publique (ex: https://votre-site/change-password?recovery=1) '
+        'dans Netlify et dans Supabase > Authentication > URL Configuration > Redirect URLs.',
+      );
+    }
+
     try {
       await _client.auth.resetPasswordForEmail(
         normalizedEmail,
-        redirectTo: AppConstants.passwordResetRedirectUrl,
+        redirectTo: redirectUrl,
       );
     } on SocketException {
       throw Exception(_networkErrorMessage());
@@ -150,6 +212,47 @@ class AuthService {
 
       // If email confirmation is disabled, Supabase may open a session.
       // Keep the app on the login flow after staff registration.
+      if (authResponse.session != null) {
+        await _client.auth.signOut();
+      }
+    } on SocketException {
+      throw Exception(_networkErrorMessage());
+    } on AuthException catch (e) {
+      throw Exception(_readableAuthError(e));
+    } catch (e) {
+      if (e.toString().toLowerCase().contains('failed host lookup')) {
+        throw Exception(_networkErrorMessage());
+      }
+      rethrow;
+    }
+  }
+
+  Future<void> signUpProviderAccount({
+    required String email,
+    required String password,
+  }) async {
+    _ensureSupabaseConfigured();
+
+    try {
+      final authResponse = await _client.auth.signUp(
+        email: email,
+        password: password,
+        data: {'account_type': 'provider'},
+        emailRedirectTo: AppConstants.emailConfirmationRedirectUrl,
+      );
+
+      if (authResponse.user == null) {
+        throw Exception('Inscription impossible.');
+      }
+
+      if (authResponse.session == null) {
+        throw Exception(
+          'Compte cree. Un email de confirmation vous a ete envoye. Confirmez votre email, puis demandez a votre manager de vous ajouter dans Gestion des roles.',
+        );
+      }
+
+      // If email confirmation is disabled, Supabase may open a session.
+      // Keep the app on the login flow after provider registration.
       if (authResponse.session != null) {
         await _client.auth.signOut();
       }
@@ -273,6 +376,13 @@ class AuthService {
 
     if (lower.contains('email not confirmed')) {
       return 'Email non confirme. Ouvrez votre boite mail et confirmez votre compte avant de vous connecter.';
+    }
+
+    if (lower.contains('otp') &&
+        (lower.contains('expired') ||
+            lower.contains('invalid') ||
+            lower.contains('already used'))) {
+      return 'Le lien de confirmation est invalide, expire, ou deja utilise. Demandez un nouvel email de confirmation.';
     }
 
     if (message.isNotEmpty) {

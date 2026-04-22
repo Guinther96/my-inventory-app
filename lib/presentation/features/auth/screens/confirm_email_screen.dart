@@ -1,18 +1,28 @@
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 
-import '../../../../services/auth_service.dart';
+import '../../../../services/auth/auth_service.dart';
 
 class ConfirmEmailScreen extends StatefulWidget {
   final String initialEmail;
   final bool isConfirmed;
   final bool waitingForActivation;
+  final String? callbackType;
+  final String? callbackTokenHash;
+  final String? callbackCode;
+  final String? authErrorCode;
+  final String? authErrorDescription;
 
   const ConfirmEmailScreen({
     super.key,
     required this.initialEmail,
     this.isConfirmed = false,
     this.waitingForActivation = false,
+    this.callbackType,
+    this.callbackTokenHash,
+    this.callbackCode,
+    this.authErrorCode,
+    this.authErrorDescription,
   });
 
   @override
@@ -22,11 +32,14 @@ class ConfirmEmailScreen extends StatefulWidget {
 class _ConfirmEmailScreenState extends State<ConfirmEmailScreen> {
   late final TextEditingController _emailController;
   bool _isSending = false;
+  bool _isVerifyingCallback = false;
+  String? _callbackErrorMessage;
 
   @override
   void initState() {
     super.initState();
     _emailController = TextEditingController(text: widget.initialEmail);
+    _verifyAuthCallbackIfNeeded();
   }
 
   @override
@@ -73,20 +86,92 @@ class _ConfirmEmailScreenState extends State<ConfirmEmailScreen> {
     }
   }
 
+  Future<void> _verifyAuthCallbackIfNeeded() async {
+    if ((widget.authErrorCode?.trim().isNotEmpty ?? false) ||
+        (widget.authErrorDescription?.trim().isNotEmpty ?? false)) {
+      return;
+    }
+
+    final hasCode = widget.callbackCode?.trim().isNotEmpty ?? false;
+    final hasTokenHash = widget.callbackTokenHash?.trim().isNotEmpty ?? false;
+
+    if (!hasCode && !hasTokenHash) {
+      return;
+    }
+
+    setState(() => _isVerifyingCallback = true);
+
+    try {
+      final authService = AuthService();
+      await authService.completeAuthCallback(
+        callbackType: widget.callbackType,
+        tokenHash: widget.callbackTokenHash,
+        authCode: widget.callbackCode,
+      );
+
+      // Never keep an implicit session after email confirmation.
+      // User must explicitly log in to avoid landing in another account.
+      await authService.signOut();
+
+      if (!mounted) {
+        return;
+      }
+
+      final email = _emailController.text.trim();
+      final encodedEmail = Uri.encodeQueryComponent(email);
+      context.go('/login?email=$encodedEmail');
+    } catch (e) {
+      if (!mounted) {
+        return;
+      }
+      setState(() {
+        _callbackErrorMessage = e
+            .toString()
+            .replaceFirst('Exception: ', '')
+            .trim();
+      });
+    } finally {
+      if (mounted) {
+        setState(() => _isVerifyingCallback = false);
+      }
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final colorScheme = theme.colorScheme;
+    final isConfirmed = widget.isConfirmed;
+    final hasAuthError =
+        _callbackErrorMessage != null ||
+        (widget.authErrorCode?.trim().isNotEmpty ?? false) ||
+        (widget.authErrorDescription?.trim().isNotEmpty ?? false);
+    final authErrorCode = widget.authErrorCode?.trim().toLowerCase() ?? '';
+    final authErrorMessage =
+        _callbackErrorMessage ??
+        _buildAuthErrorMessage(authErrorCode, widget.authErrorDescription);
 
-    final title = widget.isConfirmed
+    final title = hasAuthError
+        ? 'Lien de confirmation invalide'
+        : isConfirmed
         ? 'Email confirme'
         : 'Confirmez votre email';
-    final description = widget.isConfirmed
+    final description = hasAuthError
+        ? authErrorMessage
+        : _isVerifyingCallback
+        ? 'Verification de votre lien de confirmation en cours...'
+        : isConfirmed
         ? widget.waitingForActivation
               ? 'Votre adresse email est bien confirmee. Votre compte attend maintenant l activation par votre manager avant la premiere connexion.'
               : 'Votre adresse email est bien confirmee. Vous pouvez maintenant continuer dans l application.'
         : 'Un message de confirmation a ete envoye a votre adresse email. Ouvrez ce message, cliquez sur le lien de validation, puis revenez vous connecter dans l application.';
-    final steps = widget.isConfirmed
+    final steps = hasAuthError
+        ? const <String>[
+            '1. Demandez un nouvel email de confirmation.',
+            '2. Ouvrez uniquement le lien le plus recent recu par email.',
+            '3. Si le probleme continue, verifiez l URL de redirection autorisee dans Supabase.',
+          ]
+        : isConfirmed
         ? <String>[
             if (widget.waitingForActivation)
               '1. Attendez que votre manager active votre compte dans Utilisateurs.'
@@ -125,11 +210,17 @@ class _ConfirmEmailScreenState extends State<ConfirmEmailScreen> {
                     children: [
                       CircleAvatar(
                         radius: 28,
-                        backgroundColor: colorScheme.primaryContainer,
+                        backgroundColor: hasAuthError
+                            ? colorScheme.errorContainer
+                            : colorScheme.primaryContainer,
                         child: Icon(
-                          Icons.mark_email_unread_outlined,
+                          hasAuthError
+                              ? Icons.error_outline
+                              : Icons.mark_email_unread_outlined,
                           size: 30,
-                          color: colorScheme.primary,
+                          color: hasAuthError
+                              ? colorScheme.error
+                              : colorScheme.primary,
                         ),
                       ),
                       const SizedBox(height: 18),
@@ -186,7 +277,7 @@ class _ConfirmEmailScreenState extends State<ConfirmEmailScreen> {
                         ),
                       ),
                       const SizedBox(height: 18),
-                      if (!widget.isConfirmed)
+                      if (!isConfirmed || hasAuthError)
                         FilledButton.icon(
                           onPressed: _isSending ? null : _resendEmail,
                           icon: _isSending
@@ -208,7 +299,7 @@ class _ConfirmEmailScreenState extends State<ConfirmEmailScreen> {
                             minimumSize: const Size.fromHeight(48),
                           ),
                         ),
-                      if (widget.isConfirmed)
+                      if (isConfirmed && !hasAuthError)
                         FilledButton.icon(
                           onPressed: () => context.go('/login'),
                           icon: const Icon(Icons.login),
@@ -240,4 +331,17 @@ class _ConfirmEmailScreenState extends State<ConfirmEmailScreen> {
       ),
     );
   }
+}
+
+String _buildAuthErrorMessage(String errorCode, String? errorDescription) {
+  if (errorCode == 'otp_expired') {
+    return 'Ce lien de confirmation a expire ou a deja ete utilise. Demandez un nouvel email de confirmation puis ouvrez le lien le plus recent.';
+  }
+
+  final description = errorDescription?.trim();
+  if (description != null && description.isNotEmpty) {
+    return description;
+  }
+
+  return 'Le lien de confirmation est invalide ou n est plus utilisable. Demandez un nouvel email de confirmation.';
 }

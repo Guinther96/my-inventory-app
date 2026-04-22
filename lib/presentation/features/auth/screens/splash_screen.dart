@@ -2,6 +2,7 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
 
 class SplashScreen extends StatefulWidget {
   const SplashScreen({super.key});
@@ -37,7 +38,14 @@ class _SplashScreenState extends State<SplashScreen>
     if (!mounted) {
       return;
     }
-    context.go('/login');
+    // Si une session active existe déjà, ne pas forcer /login.
+    // Le _handleAuthStateChange dans main.dart se chargera de la redirection
+    // vers la bonne page. On navigue vers /login seulement si l'utilisateur
+    // n'est pas connecté, pour éviter le flash de /login avant la vraie page.
+    final hasSession = Supabase.instance.client.auth.currentSession != null;
+    if (!hasSession) {
+      context.go('/login');
+    }
   }
 
   @override

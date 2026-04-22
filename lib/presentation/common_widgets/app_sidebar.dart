@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:provider/provider.dart';
 
+import '../../data/providers/feature_access_provider.dart';
 import '../../data/providers/user_profile_provider.dart';
 import '../features/reports/screens/user_roles_screen.dart';
 
@@ -22,7 +23,9 @@ class AppSidebar extends StatelessWidget {
   Widget build(BuildContext context) {
     final currentRoute = GoRouterState.of(context).uri.toString();
     final profile = context.watch<UserProfileProvider>();
+    final featureAccess = context.watch<FeatureAccessProvider>();
     final isManager = profile.isManager;
+  final isProvider = profile.isProvider;
 
     return Container(
       width: 250,
@@ -44,64 +47,86 @@ class AppSidebar extends StatelessWidget {
                   ),
                 ),
                 subtitle: Text(
-                  isManager ? 'Role: Manager' : 'Role: Seller',
+                  isManager
+                      ? 'Role: Manager'
+                      : isProvider
+                          ? 'Role: Prestataire'
+                          : 'Role: Vendeur',
                   style: Theme.of(context).textTheme.bodySmall,
                 ),
               ),
             ),
-            ListTile(
-              leading: const Icon(Icons.dashboard),
-              title: const Text('Tableau de bord'),
-              selected: currentRoute == '/',
-              onTap: () => context.go('/'),
-            ),
-            if (isManager)
+            if (isProvider && featureAccess.canAccess('provider')) ...[
+              ListTile(
+                leading: const Icon(Icons.dashboard_customize),
+                title: const Text('Mon tableau de bord'),
+                selected: currentRoute == '/provider/dashboard',
+                onTap: () => context.go('/provider/dashboard'),
+              ),
+              ListTile(
+                leading: const Icon(Icons.calendar_month),
+                title: const Text('Mes réservations'),
+                selected: currentRoute.startsWith('/provider/reservations'),
+                onTap: () => context.go('/provider/reservations'),
+              ),
+            ],
+            if (!isProvider && featureAccess.canAccess('dashboard'))
+              ListTile(
+                leading: const Icon(Icons.dashboard),
+                title: const Text('Tableau de bord'),
+                selected: currentRoute == '/',
+                onTap: () => context.go('/'),
+              ),
+            if (isManager && featureAccess.canAccess('inventory'))
               ListTile(
                 leading: const Icon(Icons.inventory),
                 title: const Text('Produits'),
                 selected: currentRoute == '/products',
                 onTap: () => context.go('/products'),
               ),
-            if (isManager)
+            if (isManager && featureAccess.canAccess('inventory'))
               ListTile(
                 leading: const Icon(Icons.category),
                 title: const Text('Categories'),
                 selected: currentRoute == '/categories',
                 onTap: () => context.go('/categories'),
               ),
-            if (isManager)
+            if (isManager && featureAccess.canAccess('inventory'))
               ListTile(
                 leading: const Icon(Icons.sync_alt),
                 title: const Text('Mouvements'),
                 selected: currentRoute == '/movements',
                 onTap: () => context.go('/movements'),
               ),
-            ListTile(
-              leading: const Icon(Icons.point_of_sale),
-              title: const Text('Ventes'),
-              selected: currentRoute == '/sales',
-              onTap: () => context.go('/sales'),
-            ),
-            ListTile(
-              leading: const Icon(Icons.spa),
-              title: const Text('Services'),
-              selected: currentRoute == '/beauty/services',
-              onTap: () => context.go('/beauty/services'),
-            ),
-            ListTile(
-              leading: const Icon(Icons.event_available),
-              title: const Text('Reservations'),
-              selected: currentRoute == '/beauty/reservations',
-              onTap: () => context.go('/beauty/reservations'),
-            ),
-            if (isManager)
+            if (featureAccess.canAccess('sales'))
+              ListTile(
+                leading: const Icon(Icons.point_of_sale),
+                title: const Text('Ventes'),
+                selected: currentRoute == '/sales',
+                onTap: () => context.go('/sales'),
+              ),
+            if (featureAccess.canAccess('services'))
+              ListTile(
+                leading: const Icon(Icons.spa),
+                title: const Text('Services'),
+                selected: currentRoute == '/beauty/services',
+                onTap: () => context.go('/beauty/services'),
+              ),
+            if (featureAccess.canAccess('services'))
+              ListTile(
+                leading: const Icon(Icons.event_available),
+                title: const Text('Reservations'),
+                selected: currentRoute == '/beauty/reservations',
+                onTap: () => context.go('/beauty/reservations'),
+              ),
+            if (isManager && featureAccess.canAccess('reports'))
               ListTile(
                 leading: const Icon(Icons.bar_chart),
                 title: const Text('Rapports'),
                 selected: currentRoute == '/reports',
                 onTap: () => context.go('/reports'),
               ),
-            if (isManager)
+            if (isManager && featureAccess.canAccess('users'))
               ListTile(
                 leading: const Icon(Icons.manage_accounts),
                 title: const Text('Utilisateurs'),
@@ -109,12 +134,13 @@ class AppSidebar extends StatelessWidget {
                 onTap: () => _openUsers(context),
               ),
             const Divider(height: 24),
-            ListTile(
-              leading: const Icon(Icons.settings),
-              title: const Text('Parametres'),
-              selected: currentRoute == '/settings',
-              onTap: () => context.go('/settings'),
-            ),
+            if (featureAccess.canAccess('settings'))
+              ListTile(
+                leading: const Icon(Icons.settings),
+                title: const Text('Parametres'),
+                selected: currentRoute == '/settings',
+                onTap: () => context.go('/settings'),
+              ),
           ],
         ),
       ),

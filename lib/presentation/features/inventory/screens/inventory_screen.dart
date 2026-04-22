@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
+import '../../../../data/models/product_model.dart';
 import '../../../../data/providers/inventory_provider.dart';
 import '../../../common_widgets/app_drawer.dart';
 import '../../../common_widgets/app_sidebar.dart';
@@ -48,7 +49,11 @@ class _InventoryScreenState extends State<InventoryScreen> {
           Expanded(
             child: Consumer<InventoryProvider>(
               builder: (context, inventory, _) {
-                final products = [...inventory.products]
+                final uniqueById = <String, Product>{};
+                for (final product in inventory.products) {
+                  uniqueById[product.id] = product;
+                }
+                final products = uniqueById.values.toList()
                   ..sort((a, b) => a.name.compareTo(b.name));
 
                 if (products.isNotEmpty &&
@@ -56,6 +61,8 @@ class _InventoryScreenState extends State<InventoryScreen> {
                         inventory.findProductById(_selectedProductId!) ==
                             null)) {
                   _selectedProductId = products.first.id;
+                } else if (products.isEmpty) {
+                  _selectedProductId = null;
                 }
 
                 return Padding(

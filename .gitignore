@@ -43,3 +43,7 @@ app.*.map.json
 /android/app/debug
 /android/app/profile
 /android/app/release
+
+# Local Gradle cache workaround (project-scoped)
+/.gradle-user-home/
+/android/.gradle-user-home/

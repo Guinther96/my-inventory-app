@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:provider/provider.dart';
 
+import '../../data/providers/feature_access_provider.dart';
 import '../../data/providers/user_profile_provider.dart';
 import '../features/reports/screens/user_roles_screen.dart';
 
@@ -26,6 +27,7 @@ class AppDrawer extends StatelessWidget {
   Widget build(BuildContext context) {
     final currentRoute = GoRouterState.of(context).uri.toString();
     final profile = context.watch<UserProfileProvider>();
+    final featureAccess = context.watch<FeatureAccessProvider>();
     final isManager = profile.isManager;
 
     return Drawer(
@@ -40,15 +42,16 @@ class AppDrawer extends StatelessWidget {
               style: TextStyle(color: Colors.white, fontSize: 24),
             ),
           ),
-          ListTile(
-            leading: const Icon(Icons.dashboard),
-            title: const Text('Tableau de bord'),
-            selected: currentRoute == '/',
-            onTap: () {
-              _goToRoute(context, '/');
-            },
-          ),
-          if (isManager)
+          if (featureAccess.canAccess('dashboard'))
+            ListTile(
+              leading: const Icon(Icons.dashboard),
+              title: const Text('Tableau de bord'),
+              selected: currentRoute == '/',
+              onTap: () {
+                _goToRoute(context, '/');
+              },
+            ),
+          if (isManager && featureAccess.canAccess('inventory'))
             ListTile(
               leading: const Icon(Icons.inventory),
               title: const Text('Produits'),
@@ -57,7 +60,7 @@ class AppDrawer extends StatelessWidget {
                 _goToRoute(context, '/products');
               },
             ),
-          if (isManager)
+          if (isManager && featureAccess.canAccess('inventory'))
             ListTile(
               leading: const Icon(Icons.category),
               title: const Text('Categories'),
@@ -66,7 +69,7 @@ class AppDrawer extends StatelessWidget {
                 _goToRoute(context, '/categories');
               },
             ),
-          if (isManager)
+          if (isManager && featureAccess.canAccess('inventory'))
             ListTile(
               leading: const Icon(Icons.sync_alt),
               title: const Text('Mouvements'),
@@ -75,31 +78,34 @@ class AppDrawer extends StatelessWidget {
                 _goToRoute(context, '/movements');
               },
             ),
-          ListTile(
-            leading: const Icon(Icons.point_of_sale),
-            title: const Text('Ventes'),
-            selected: currentRoute == '/sales',
-            onTap: () {
-              _goToRoute(context, '/sales');
-            },
-          ),
-          ListTile(
-            leading: const Icon(Icons.spa),
-            title: const Text('Services'),
-            selected: currentRoute == '/beauty/services',
-            onTap: () {
-              _goToRoute(context, '/beauty/services');
-            },
-          ),
-          ListTile(
-            leading: const Icon(Icons.event_available),
-            title: const Text('Reservations'),
-            selected: currentRoute == '/beauty/reservations',
-            onTap: () {
-              _goToRoute(context, '/beauty/reservations');
-            },
-          ),
-          if (isManager)
+          if (featureAccess.canAccess('sales'))
+            ListTile(
+              leading: const Icon(Icons.point_of_sale),
+              title: const Text('Ventes'),
+              selected: currentRoute == '/sales',
+              onTap: () {
+                _goToRoute(context, '/sales');
+              },
+            ),
+          if (featureAccess.canAccess('services'))
+            ListTile(
+              leading: const Icon(Icons.spa),
+              title: const Text('Services'),
+              selected: currentRoute == '/beauty/services',
+              onTap: () {
+                _goToRoute(context, '/beauty/services');
+              },
+            ),
+          if (featureAccess.canAccess('services'))
+            ListTile(
+              leading: const Icon(Icons.event_available),
+              title: const Text('Reservations'),
+              selected: currentRoute == '/beauty/reservations',
+              onTap: () {
+                _goToRoute(context, '/beauty/reservations');
+              },
+            ),
+          if (isManager && featureAccess.canAccess('reports'))
             ListTile(
               leading: const Icon(Icons.bar_chart),
               title: const Text('Rapports'),
@@ -108,7 +114,7 @@ class AppDrawer extends StatelessWidget {
                 _goToRoute(context, '/reports');
               },
             ),
-          if (isManager)
+          if (isManager && featureAccess.canAccess('users'))
             ListTile(
               leading: const Icon(Icons.manage_accounts),
               title: const Text('Utilisateurs'),
@@ -117,14 +123,15 @@ class AppDrawer extends StatelessWidget {
                 _openUsers(context);
               },
             ),
-          ListTile(
-            leading: const Icon(Icons.settings),
-            title: const Text('Parametres'),
-            selected: currentRoute == '/settings',
-            onTap: () {
-              _goToRoute(context, '/settings');
-            },
-          ),
+          if (featureAccess.canAccess('settings'))
+            ListTile(
+              leading: const Icon(Icons.settings),
+              title: const Text('Parametres'),
+              selected: currentRoute == '/settings',
+              onTap: () {
+                _goToRoute(context, '/settings');
+              },
+            ),
         ],
       ),
     );

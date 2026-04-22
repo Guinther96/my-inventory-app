@@ -1,4 +1,4 @@
-enum AppRole { manager, seller }
+enum AppRole { manager, seller, provider }
 
 class UserProfile {
   final String id;
@@ -15,6 +15,14 @@ class UserProfile {
 
   bool get isManager => role == AppRole.manager;
   bool get isSeller => role == AppRole.seller;
+  bool get isProvider => role == AppRole.provider;
+
+  factory UserProfile.empty() => const UserProfile(
+    id: '',
+    email: '',
+    companyId: '',
+    role: AppRole.seller,
+  );
 
   factory UserProfile.fromJson(Map<String, dynamic> json) {
     final rawRole = (json['role'] ?? '').toString().toLowerCase();
@@ -23,7 +31,11 @@ class UserProfile {
       id: json['id']?.toString() ?? '',
       email: json['email']?.toString() ?? '',
       companyId: json['company_id']?.toString() ?? '',
-      role: rawRole == 'manager' ? AppRole.manager : AppRole.seller,
+      role: rawRole == 'manager'
+          ? AppRole.manager
+          : rawRole == 'provider'
+              ? AppRole.provider
+              : AppRole.seller,
     );
   }
 }

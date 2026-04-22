@@ -1,6 +1,6 @@
 import 'package:supabase_flutter/supabase_flutter.dart';
 
-import '../data/models/service_model.dart';
+import '../../data/models/service_model.dart';
 
 class ServiceService {
   SupabaseClient get _client => Supabase.instance.client;

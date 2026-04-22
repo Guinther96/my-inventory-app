@@ -1,12 +1,14 @@
+import 'package:flutter/foundation.dart';
 import 'package:intl/intl.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
-import '../data/models/client_model.dart';
-import '../data/models/reservation_model.dart';
-import '../data/models/service_model.dart';
-import '../data/models/service_order_item_model.dart';
-import '../data/models/service_order_model.dart';
+import '../../data/models/client_model.dart';
+import '../../data/models/reservation_model.dart';
+import '../../data/models/service_model.dart';
+import '../../data/models/service_order_item_model.dart';
+import '../../data/models/service_order_model.dart';
 import 'reservation_service.dart';
+import 'service_order_printer_service.dart';
 
 class ClientActivitySummary {
   final List<Client> activeClients;
@@ -27,6 +29,8 @@ class ClientActivitySummary {
 class ServiceOrderService {
   SupabaseClient get _client => Supabase.instance.client;
   final ReservationService _reservationService = ReservationService();
+  final ServiceOrderPrinterService _printerService =
+      ServiceOrderPrinterService();
 
   Future<String> _resolveCompanyId() async {
     final userId = _client.auth.currentUser?.id;
@@ -246,6 +250,8 @@ class ServiceOrderService {
             'unit_price': item.unitPrice,
             'quantity': item.quantity,
             'line_total': item.lineTotal,
+            if (item.providerId != null) 'provider_id': item.providerId,
+            if (item.providerName != null) 'provider_name': item.providerName,
           },
         )
         .toList();
@@ -261,6 +267,49 @@ class ServiceOrderService {
     }
 
     return fetchOrderById(createdOrder.id);
+  }
+
+  /// Creates a service order with integrated printer validation and printing.
+  ///
+  /// This method combines service order creation with the printer workflow:
+  /// 1. Validates printer status (if enabled)
+  /// 2. Creates the service order in the database
+  /// 3. Attempts to print the receipt silently (doesn't block the order save)
+  ///
+  /// Returns a tuple (ServiceOrder, PrintResult) with the order and print status.
+  Future<(ServiceOrder, PrintResult)> createServiceOrderWithPrinter({
+    String? clientId,
+    required String clientName,
+    required List<ServiceOrderItem> items,
+    String? paymentMethod,
+    String? notes,
+    String? reservationId,
+    required String companyName,
+    String? companyEmail,
+  }) async {
+    // Create the service order (this is the critical operation)
+    final order = await createServiceOrder(
+      clientId: clientId,
+      clientName: clientName,
+      items: items,
+      paymentMethod: paymentMethod,
+      notes: notes,
+      reservationId: reservationId,
+    );
+
+    // Attempt to print the receipt silently
+    // If printer fails, the order is already saved - no blocking
+    final printResult = await _printerService.silentPrintServiceOrder(
+      order: order,
+      companyName: companyName,
+      companyEmail: companyEmail,
+    );
+
+    debugPrint(
+      'Service order created: ${order.id}, Print result: ${printResult.message}',
+    );
+
+    return (order, printResult);
   }
 
   Future<ServiceOrder> convertReservationToOrder({

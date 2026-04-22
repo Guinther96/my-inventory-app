@@ -1,7 +1,8 @@
 import 'package:flutter/foundation.dart' show ChangeNotifier;
 
+import '../../core/security/route_access_guard.dart';
 import '../models/user_profile_model.dart';
-import '../../services/user_profile_service.dart';
+import '../../services/user/user_profile_service.dart';
 
 class UserProfileProvider extends ChangeNotifier {
   final UserProfileService _service = UserProfileService();
@@ -10,15 +11,18 @@ class UserProfileProvider extends ChangeNotifier {
   bool _isLoading = false;
   bool _isInitialized = false;
   String? _errorMessage;
+  bool _mustChangePassword = false;
 
   UserProfile? get profile => _profile;
   bool get isLoading => _isLoading;
   bool get isInitialized => _isInitialized;
   String? get errorMessage => _errorMessage;
+  bool get mustChangePassword => _mustChangePassword;
 
   AppRole get role => _profile?.role ?? AppRole.seller;
   bool get isManager => role == AppRole.manager;
   bool get isSeller => role == AppRole.seller;
+  bool get isProvider => role == AppRole.provider;
 
   Future<void> initialize({bool forceRefresh = false}) async {
     if (_isInitialized && !forceRefresh) {
@@ -31,9 +35,11 @@ class UserProfileProvider extends ChangeNotifier {
 
     try {
       _profile = await _service.fetchCurrentProfile();
+      _mustChangePassword = await _service.fetchMustChangePassword();
       _isInitialized = true;
     } catch (e) {
       _profile = null;
+      _mustChangePassword = false;
       _errorMessage = e.toString();
       _isInitialized = true;
     } finally {
@@ -43,18 +49,8 @@ class UserProfileProvider extends ChangeNotifier {
   }
 
   bool canAccessRoute(String route) {
-    if (isManager) {
-      return true;
-    }
-
-    return route == '/' ||
-        route.startsWith('/sales') ||
-        route.startsWith('/beauty/services') ||
-        route.startsWith('/beauty/reservations') ||
-        route.startsWith('/beauty/orders/new') ||
-        route.startsWith('/reports') ||
-        route.startsWith('/settings') ||
-        route == '/login';
+    final decision = RouteAccessGuard.evaluateSync(route: route, role: role);
+    return decision.allowed;
   }
 
   void clear() {
@@ -62,6 +58,7 @@ class UserProfileProvider extends ChangeNotifier {
     _isLoading = false;
     _isInitialized = false;
     _errorMessage = null;
+    _mustChangePassword = false;
     _service.clearRoleCache();
     notifyListeners();
   }

@@ -4,7 +4,9 @@ import 'package:provider/provider.dart';
 
 import '../../../../data/providers/inventory_provider.dart';
 import '../../../../data/providers/user_profile_provider.dart';
-import '../../../../services/auth_service.dart';
+import '../../../../services/auth/auth_service.dart';
+import '../../../../services/printer/printer_models.dart';
+import '../../../../services/printer/printer_service.dart';
 import '../../../common_widgets/app_drawer.dart';
 import '../../../common_widgets/app_sidebar.dart';
 import 'user_roles_screen.dart';
@@ -103,35 +105,12 @@ class SettingsScreen extends StatelessWidget {
                           ?.copyWith(fontWeight: FontWeight.w800),
                     ),
                     const SizedBox(height: 14),
-                    _SettingsBlock(
-                      title: 'Maintenance des donnees',
-                      description:
-                          'Reinitialiser les donnees efface les elements saisis et recharge un jeu de demonstration.',
-                      icon: Icons.build_circle_outlined,
-                      iconColor: const Color(0xFFD97706),
-                      child: FilledButton.tonalIcon(
-                        onPressed: () async {
-                          await context
-                              .read<InventoryProvider>()
-                              .clearAllData();
-                          if (context.mounted) {
-                            ScaffoldMessenger.of(context).showSnackBar(
-                              const SnackBar(
-                                content: Text('Donnees reinitialisees.'),
-                              ),
-                            );
-                          }
-                        },
-                        icon: const Icon(Icons.delete_sweep),
-                        label: const Text('Reinitialiser les donnees'),
-                      ),
-                    ),
-                    const SizedBox(height: 14),
+
                     if (isManager)
                       _SettingsBlock(
                         title: 'Gestion equipe',
                         description:
-                            'Attribuez les roles manager/seller aux utilisateurs de votre entreprise.',
+                            'Attribuez les roles manager/caissier aux utilisateurs de votre entreprise.',
                         icon: Icons.manage_accounts_outlined,
                         iconColor: const Color(0xFF0A8A4B),
                         child: FilledButton.tonalIcon(
@@ -141,6 +120,19 @@ class SettingsScreen extends StatelessWidget {
                         ),
                       ),
                     if (isManager) const SizedBox(height: 14),
+                    _SettingsBlock(
+                      title: 'Imprimante Bluetooth',
+                      description:
+                          'Connectez une imprimante pour les tickets de vente et de service.',
+                      icon: Icons.print_outlined,
+                      iconColor: const Color(0xFF0A7D6D),
+                      child: _PrinterSettingsPanel(
+                        companyName: context
+                            .read<InventoryProvider>()
+                            .companyName,
+                      ),
+                    ),
+                    const SizedBox(height: 14),
                     _SettingsBlock(
                       title: 'Securite du compte',
                       description:
@@ -173,6 +165,223 @@ class SettingsScreen extends StatelessWidget {
           ),
         ],
       ),
+    );
+  }
+}
+
+class _PrinterSettingsPanel extends StatefulWidget {
+  final String companyName;
+
+  const _PrinterSettingsPanel({required this.companyName});
+
+  @override
+  State<_PrinterSettingsPanel> createState() => _PrinterSettingsPanelState();
+}
+
+class _PrinterSettingsPanelState extends State<_PrinterSettingsPanel> {
+  bool _isLoading = true;
+  bool _isBusy = false;
+  bool _isConnected = false;
+  List<PrinterDeviceInfo> _devices = const <PrinterDeviceInfo>[];
+  PrinterDeviceInfo? _selectedDevice;
+
+  @override
+  void initState() {
+    super.initState();
+    _refreshPrinterState();
+  }
+
+  Future<void> _refreshPrinterState() async {
+    setState(() => _isLoading = true);
+    try {
+      final devices = await PrinterService.getPairedBluetoothDevices();
+      final connected = await PrinterService.isConnected();
+      final saved = await PrinterService.getPreferredPrinter();
+
+      PrinterDeviceInfo? selected;
+      if (saved != null) {
+        for (final device in devices) {
+          if (device.address == saved.address) {
+            selected = device;
+            break;
+          }
+        }
+      }
+
+      setState(() {
+        _devices = devices;
+        _isConnected = connected;
+        _selectedDevice = selected;
+      });
+    } catch (e, st) {
+      debugPrint('Refresh printer state failed: $e');
+      debugPrint('$st');
+    } finally {
+      if (mounted) {
+        setState(() => _isLoading = false);
+      }
+    }
+  }
+
+  Future<void> _connectSelected() async {
+    final device = _selectedDevice;
+    if (device == null) {
+      _show('Selectionnez une imprimante.');
+      return;
+    }
+
+    setState(() => _isBusy = true);
+    try {
+      final connected = await PrinterService.connectBluetoothPrinter(device);
+      if (connected) {
+        _show('Imprimante connectee.');
+      } else {
+        _show('Impossible de connecter l imprimante.');
+      }
+      await _refreshPrinterState();
+    } catch (e, st) {
+      debugPrint('Connect printer failed: $e');
+      debugPrint('$st');
+      _show('Erreur de connexion imprimante.');
+    } finally {
+      if (mounted) {
+        setState(() => _isBusy = false);
+      }
+    }
+  }
+
+  Future<void> _testPrint() async {
+    setState(() => _isBusy = true);
+    try {
+      if (!await PrinterService.isConnected()) {
+        _show('Imprimante non connectee.');
+        return;
+      }
+
+      await PrinterService.printTestReceipt(companyName: widget.companyName);
+      _show('Ticket test envoye.');
+    } catch (e, st) {
+      debugPrint('Test print failed: $e');
+      debugPrint('$st');
+      _show('Erreur pendant le test impression.');
+    } finally {
+      if (mounted) {
+        setState(() => _isBusy = false);
+      }
+    }
+  }
+
+  Future<void> _disconnect() async {
+    setState(() => _isBusy = true);
+    try {
+      await PrinterService.disconnect();
+      _show('Imprimante deconnectee.');
+      await _refreshPrinterState();
+    } catch (e, st) {
+      debugPrint('Disconnect printer failed: $e');
+      debugPrint('$st');
+      _show('Erreur de deconnexion imprimante.');
+    } finally {
+      if (mounted) {
+        setState(() => _isBusy = false);
+      }
+    }
+  }
+
+  void _show(String message) {
+    if (!mounted) {
+      return;
+    }
+    ScaffoldMessenger.of(
+      context,
+    ).showSnackBar(SnackBar(content: Text(message)));
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    if (!PrinterService.supportsPrinting) {
+      return const Text(
+        'Impression Bluetooth disponible uniquement sur Android.',
+      );
+    }
+
+    if (_isLoading) {
+      return const Padding(
+        padding: EdgeInsets.symmetric(vertical: 6),
+        child: LinearProgressIndicator(minHeight: 2),
+      );
+    }
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Row(
+          children: [
+            Icon(
+              _isConnected
+                  ? Icons.bluetooth_connected
+                  : Icons.bluetooth_disabled,
+              color: _isConnected ? Colors.green : Colors.orange,
+            ),
+            const SizedBox(width: 8),
+            Text(_isConnected ? 'Etat: connectee' : 'Etat: non connectee'),
+          ],
+        ),
+        const SizedBox(height: 10),
+        DropdownButtonFormField<PrinterDeviceInfo>(
+          initialValue: _selectedDevice,
+          isExpanded: true,
+          decoration: const InputDecoration(
+            labelText: 'Imprimante appairee',
+            border: OutlineInputBorder(),
+            isDense: true,
+          ),
+          items: _devices
+              .map(
+                (device) => DropdownMenuItem<PrinterDeviceInfo>(
+                  value: device,
+                  child: Text(
+                    device.label,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                ),
+              )
+              .toList(),
+          onChanged: _isBusy
+              ? null
+              : (value) {
+                  setState(() => _selectedDevice = value);
+                },
+        ),
+        const SizedBox(height: 10),
+        Wrap(
+          spacing: 8,
+          runSpacing: 8,
+          children: [
+            OutlinedButton.icon(
+              onPressed: _isBusy ? null : _refreshPrinterState,
+              icon: const Icon(Icons.refresh),
+              label: const Text('Scanner'),
+            ),
+            FilledButton.tonalIcon(
+              onPressed: _isBusy ? null : _connectSelected,
+              icon: const Icon(Icons.bluetooth_searching),
+              label: const Text('Connecter'),
+            ),
+            FilledButton.tonalIcon(
+              onPressed: _isBusy ? null : _testPrint,
+              icon: const Icon(Icons.receipt_long),
+              label: const Text('Test impression'),
+            ),
+            TextButton.icon(
+              onPressed: _isBusy ? null : _disconnect,
+              icon: const Icon(Icons.link_off),
+              label: const Text('Deconnecter'),
+            ),
+          ],
+        ),
+      ],
     );
   }
 }

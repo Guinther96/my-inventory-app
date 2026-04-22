@@ -6,6 +6,8 @@ class ServiceOrderItem {
   final double unitPrice;
   final int quantity;
   final double lineTotal;
+  final String? providerId;
+  final String? providerName;
   final DateTime createdAt;
 
   ServiceOrderItem({
@@ -16,6 +18,8 @@ class ServiceOrderItem {
     required this.unitPrice,
     required this.quantity,
     required this.lineTotal,
+    this.providerId,
+    this.providerName,
     required this.createdAt,
   });
 
@@ -30,6 +34,8 @@ class ServiceOrderItem {
       unitPrice: double.tryParse(json['unit_price']?.toString() ?? '') ?? 0,
       quantity: int.tryParse(json['quantity']?.toString() ?? '') ?? 1,
       lineTotal: double.tryParse(json['line_total']?.toString() ?? '') ?? 0,
+      providerId: json['provider_id']?.toString(),
+      providerName: json['provider_name']?.toString(),
       createdAt:
           DateTime.tryParse(createdAtRaw?.toString() ?? '') ?? DateTime.now(),
     );
@@ -44,6 +50,8 @@ class ServiceOrderItem {
       'unit_price': unitPrice,
       'quantity': quantity,
       'line_total': lineTotal,
+      if (providerId != null) 'provider_id': providerId,
+      if (providerName != null) 'provider_name': providerName,
     };
   }
 }

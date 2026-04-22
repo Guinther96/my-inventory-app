@@ -50,13 +50,17 @@ class AppConstants {
     final base = Uri.base;
     final host = base.host.trim().toLowerCase();
     final scheme = base.scheme.trim().toLowerCase();
+    final isLocalHost =
+        host == 'localhost' || host == '127.0.0.1' || host == '::1';
 
     if (host.isEmpty ||
         scheme.isEmpty ||
-        (scheme != 'http' && scheme != 'https') ||
-        host == 'localhost' ||
-        host == '127.0.0.1' ||
-        host == '::1') {
+        (scheme != 'http' && scheme != 'https')) {
+      return null;
+    }
+
+    // Allow localhost redirects during web debug to simplify local auth tests.
+    if (isLocalHost && kReleaseMode) {
       return null;
     }
 

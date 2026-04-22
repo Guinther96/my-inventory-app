@@ -1,5 +1,5 @@
 [build]
-  command = "if [ ! -x \"$HOME/flutter/bin/flutter\" ]; then git clone https://github.com/flutter/flutter.git --depth 1 -b stable $HOME/flutter; fi && export PATH=\"$HOME/flutter/bin:$PATH\" && flutter config --no-analytics && flutter pub get && flutter build web --release"
+  command = "if [ ! -x \"$HOME/flutter/bin/flutter\" ]; then git clone https://github.com/flutter/flutter.git --depth 1 -b stable $HOME/flutter; fi && export PATH=\"$HOME/flutter/bin:$PATH\" && flutter config --no-analytics && flutter pub get && flutter build web --release --dart-define=EMAIL_CONFIRM_REDIRECT_URL=$EMAIL_CONFIRM_REDIRECT_URL --dart-define=PASSWORD_RESET_REDIRECT_URL=$PASSWORD_RESET_REDIRECT_URL"
   publish = "build/web"
 
 [[redirects]]

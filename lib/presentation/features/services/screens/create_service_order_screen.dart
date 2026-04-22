@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:intl/intl.dart';
+import 'package:provider/provider.dart';
 
 import '../../../common_widgets/app_drawer.dart';
 import '../../../common_widgets/app_sidebar.dart';
@@ -9,9 +10,11 @@ import '../../../../../data/models/reservation_model.dart';
 import '../../../../../data/models/service_model.dart';
 import '../../../../../data/models/service_order_item_model.dart';
 import '../../../../../data/models/service_order_model.dart';
-import '../../../../../services/service_service.dart';
-import '../../../../../services/service_order_service.dart';
-import '../../../../../services/thermal_ticket_service.dart';
+import '../../../../../data/models/user_profile_model.dart';
+import '../../../../../data/providers/inventory_provider.dart';
+import '../../../../../services/service_orders/service_service.dart';
+import '../../../../../services/service_orders/service_order_service.dart';
+import '../../../../../services/user/user_profile_service.dart';
 
 class CreateServiceOrderScreen extends StatefulWidget {
   final Reservation? initialReservation;
@@ -26,7 +29,7 @@ class CreateServiceOrderScreen extends StatefulWidget {
 class _CreateServiceOrderScreenState extends State<CreateServiceOrderScreen> {
   final ServiceService _serviceCatalogService = ServiceService();
   final ServiceOrderService _service = ServiceOrderService();
-  final ThermalTicketService _ticketService = ThermalTicketService();
+  final UserProfileService _userProfileService = UserProfileService();
 
   bool _isLoading = true;
   bool _isSubmitting = false;
@@ -34,6 +37,7 @@ class _CreateServiceOrderScreenState extends State<CreateServiceOrderScreen> {
 
   List<Service> _services = const <Service>[];
   List<Client> _clients = const <Client>[];
+  List<UserProfile> _providers = const <UserProfile>[];
   List<_OrderLine> _lines = <_OrderLine>[];
 
   Client? _selectedClient;
@@ -65,6 +69,7 @@ class _CreateServiceOrderScreenState extends State<CreateServiceOrderScreen> {
       final results = await Future.wait<dynamic>([
         _serviceCatalogService.fetchServices(),
         _service.fetchClients(),
+        _userProfileService.fetchCompanyUsers(),
       ]);
 
       if (!mounted) {
@@ -73,6 +78,10 @@ class _CreateServiceOrderScreenState extends State<CreateServiceOrderScreen> {
 
       _services = results[0] as List<Service>;
       _clients = results[1] as List<Client>;
+      
+      // Filtrer seulement les prestataires
+      final allUsers = results[2] as List<UserProfile>;
+      _providers = allUsers.where((u) => u.role == AppRole.provider).toList();
 
       final reservation = widget.initialReservation;
       if (reservation != null) {
@@ -163,18 +172,25 @@ class _CreateServiceOrderScreenState extends State<CreateServiceOrderScreen> {
               unitPrice: line.service.price,
               quantity: line.quantity,
               lineTotal: line.quantity * line.service.price,
+              providerId: line.providerId,
+              providerName: line.providerName,
               createdAt: DateTime.now(),
             ),
           )
           .toList();
 
-      final order = await _service.createServiceOrder(
+      // Use integrated printer service within the service layer
+      final companyName = context.read<InventoryProvider>().companyName;
+      final companyEmail = context.read<InventoryProvider>().companyEmail;
+      final (order, printResult) = await _service.createServiceOrderWithPrinter(
         clientId: clientId,
         clientName: clientName,
         items: items,
         paymentMethod: 'counter',
         notes: _notesCtrl.text.trim().isEmpty ? null : _notesCtrl.text.trim(),
         reservationId: widget.initialReservation?.id,
+        companyName: companyName,
+        companyEmail: companyEmail,
       );
 
       if (!mounted) {
@@ -191,7 +207,12 @@ class _CreateServiceOrderScreenState extends State<CreateServiceOrderScreen> {
       _phoneCtrl.clear();
       _notesCtrl.clear();
 
-      _show('Paiement enregistre. Ticket genere.');
+      // Show appropriate message based on print status
+      _show(
+        printResult.success
+            ? 'Paiement enregistre. Ticket genere.'
+            : 'Paiement enregistre. ${printResult.message}',
+      );
     } catch (e) {
       _show('Erreur paiement: $e');
     } finally {
@@ -202,16 +223,6 @@ class _CreateServiceOrderScreenState extends State<CreateServiceOrderScreen> {
   }
 
   Future<void> _showTicketDialog(ServiceOrder order) async {
-    final bytes = _ticketService.buildEscPosTicket(
-      salonName: 'BiznisPlus Beauty',
-      date: order.createdAt,
-      clientName: order.clientName,
-      items: order.items,
-      total: order.totalAmount,
-      cashierName: order.cashierName ?? 'Caissier',
-      ticketNumber: order.ticketNumber,
-    );
-
     await showDialog<void>(
       context: context,
       builder: (context) {
@@ -234,13 +245,11 @@ class _CreateServiceOrderScreenState extends State<CreateServiceOrderScreen> {
                 const Text('Services:'),
                 ...order.items.map(
                   (item) => Text(
-                    '- ${item.serviceName}: ${item.unitPrice.toStringAsFixed(2)} x ${item.quantity} = ${item.lineTotal.toStringAsFixed(2)}',
+                    '- ${item.serviceName}: ${item.unitPrice.toStringAsFixed(2)} Gdes x ${item.quantity} = ${item.lineTotal.toStringAsFixed(2)} Gdes',
                   ),
                 ),
                 const SizedBox(height: 8),
-                Text('Total: ${order.totalAmount.toStringAsFixed(2)}'),
-                const SizedBox(height: 8),
-                Text('ESC/POS bytes: ${bytes.length}'),
+                Text('Total: ${order.totalAmount.toStringAsFixed(2)} Gdes'),
               ],
             ),
           ),
@@ -398,7 +407,7 @@ class _CreateServiceOrderScreenState extends State<CreateServiceOrderScreen> {
                             .map(
                               (service) => ActionChip(
                                 label: Text(
-                                  '${service.name} (${service.price.toStringAsFixed(2)})',
+                                  '${service.name} (${service.price.toStringAsFixed(2)} Gdes)',
                                 ),
                                 onPressed: () => _addService(service),
                               ),
@@ -420,29 +429,105 @@ class _CreateServiceOrderScreenState extends State<CreateServiceOrderScreen> {
                               if (_lines.isEmpty)
                                 const Text('Aucun service ajoute.')
                               else
-                                ..._lines.map(
-                                  (line) => ListTile(
-                                    contentPadding: EdgeInsets.zero,
-                                    title: Text(line.service.name),
-                                    subtitle: Text(
-                                      '${line.quantity} x ${line.service.price.toStringAsFixed(2)} = ${(line.quantity * line.service.price).toStringAsFixed(2)}',
-                                    ),
-                                    trailing: Wrap(
-                                      spacing: 4,
-                                      children: [
-                                        IconButton(
-                                          onPressed: () =>
-                                              _changeQty(line.service, -1),
-                                          icon: const Icon(Icons.remove),
+                                ..._lines.asMap().entries.map(
+                                  (entry) {
+                                    final idx = entry.key;
+                                    final line = entry.value;
+                                    return Card(
+                                      color: Colors.grey.shade100,
+                                      margin: const EdgeInsets.only(bottom: 12),
+                                      child: Padding(
+                                        padding: const EdgeInsets.all(12),
+                                        child: Column(
+                                          crossAxisAlignment:
+                                              CrossAxisAlignment.start,
+                                          children: [
+                                            Text(
+                                              line.service.name,
+                                              style: const TextStyle(
+                                                fontWeight: FontWeight.bold,
+                                              ),
+                                            ),
+                                            const SizedBox(height: 8),
+                                            Text(
+                                              '${line.quantity} x ${line.service.price.toStringAsFixed(2)} Gdes = ${(line.quantity * line.service.price).toStringAsFixed(2)} Gdes',
+                                              style: Theme.of(context)
+                                                  .textTheme
+                                                  .bodySmall,
+                                            ),
+                                            const SizedBox(height: 12),
+                                            DropdownButtonFormField<String?>(
+                                              value: line.providerId,
+                                              hint: const Text('Selectioner le prestataire'),
+                                              decoration: const InputDecoration(
+                                                labelText: 'Prestataire',
+                                                border: OutlineInputBorder(),
+                                                contentPadding:
+                                                    EdgeInsets.symmetric(
+                                                      horizontal: 12,
+                                                      vertical: 8,
+                                                    ),
+                                              ),
+                                              items: _providers
+                                                  .map(
+                                                    (provider) =>
+                                                        DropdownMenuItem<String?>(
+                                                      value: provider.id,
+                                                      child: Text(
+                                                        provider.email,
+                                                      ),
+                                                    ),
+                                                  )
+                                                  .toList(),
+                                              onChanged: (String? newProviderId) {
+                                                setState(() {
+                                                  if (idx >= 0 && idx < _lines.length) {
+                                                    final provider =
+                                                        _providers.firstWhere(
+                                                      (p) => p.id == newProviderId,
+                                                      orElse: UserProfile.empty,
+                                                    );
+                                                    _lines[idx] = _lines[idx]
+                                                        .copyWith(
+                                                          providerId:
+                                                              newProviderId,
+                                                          providerName:
+                                                              provider.email,
+                                                        );
+                                                  }
+                                                });
+                                              },
+                                            ),
+                                            const SizedBox(height: 8),
+                                            Row(
+                                              children: [
+                                                IconButton(
+                                                  onPressed: () =>
+                                                      _changeQty(line.service, -1),
+                                                  icon: const Icon(
+                                                    Icons.remove_circle_outline,
+                                                  ),
+                                                ),
+                                                Text(
+                                                  '${line.quantity}',
+                                                  style: const TextStyle(
+                                                    fontWeight: FontWeight.bold,
+                                                  ),
+                                                ),
+                                                IconButton(
+                                                  onPressed: () =>
+                                                      _changeQty(line.service, 1),
+                                                  icon: const Icon(
+                                                    Icons.add_circle_outline,
+                                                  ),
+                                                ),
+                                              ],
+                                            ),
+                                          ],
                                         ),
-                                        IconButton(
-                                          onPressed: () =>
-                                              _changeQty(line.service, 1),
-                                          icon: const Icon(Icons.add),
-                                        ),
-                                      ],
-                                    ),
-                                  ),
+                                      ),
+                                    );
+                                  },
                                 ),
                               const Divider(),
                               Text(
@@ -473,13 +558,27 @@ class _CreateServiceOrderScreenState extends State<CreateServiceOrderScreen> {
 class _OrderLine {
   final Service service;
   final int quantity;
+  final String? providerId;
+  final String? providerName;
 
-  const _OrderLine({required this.service, required this.quantity});
+  const _OrderLine({
+    required this.service,
+    required this.quantity,
+    this.providerId,
+    this.providerName,
+  });
 
-  _OrderLine copyWith({Service? service, int? quantity}) {
+  _OrderLine copyWith({
+    Service? service,
+    int? quantity,
+    String? providerId,
+    String? providerName,
+  }) {
     return _OrderLine(
       service: service ?? this.service,
       quantity: quantity ?? this.quantity,
+      providerId: providerId ?? this.providerId,
+      providerName: providerName ?? this.providerName,
     );
   }
 }

@@ -4,9 +4,9 @@ import 'package:provider/provider.dart';
 
 import '../../../../data/providers/inventory_provider.dart';
 import '../../../../data/providers/user_profile_provider.dart';
-import '../../../../services/auth_service.dart';
+import '../../../../services/auth/auth_service.dart';
 
-enum _RegisterMode { company, staff }
+enum _RegisterMode { company, staff, provider }
 
 class LoginScreen extends StatefulWidget {
   const LoginScreen({super.key});
@@ -113,7 +113,9 @@ class _LoginScreenState extends State<LoginScreen> {
                         _isRegister
                             ? _registerMode == _RegisterMode.company
                                   ? 'Creer un compte entreprise'
-                                  : 'Creer un compte employe'
+                                  : _registerMode == _RegisterMode.staff
+                                  ? 'Creer un compte employe'
+                                  : 'Creer un compte prestataire'
                             : 'Connexion',
                         style: Theme.of(context).textTheme.headlineSmall
                             ?.copyWith(fontWeight: FontWeight.w800),
@@ -124,7 +126,9 @@ class _LoginScreenState extends State<LoginScreen> {
                         _isRegister
                             ? _registerMode == _RegisterMode.company
                                   ? 'Premiere ouverture: configurez votre compte compagnie.'
-                                  : 'Compte manager/seller: confirmez l email recu puis faites-vous activer par un manager.'
+                                  : _registerMode == _RegisterMode.staff
+                                  ? 'Compte manager/caissier: confirmez l email recu puis faites-vous activer par un manager.'
+                                  : 'Compte prestataire: confirmez l email recu puis demandez a votre manager de vous ajouter dans Gestion des roles.'
                             : 'Connectez-vous a votre espace de gestion.',
                         textAlign: TextAlign.center,
                         style: theme.textTheme.bodyMedium?.copyWith(
@@ -166,31 +170,88 @@ class _LoginScreenState extends State<LoginScreen> {
                       ],
                       if (_isRegister) ...[
                         const SizedBox(height: 16),
-                        DropdownButtonFormField<_RegisterMode>(
-                          value: _registerMode,
-                          decoration: const InputDecoration(
-                            labelText: 'Type de compte',
+                        Text(
+                          'Type de compte',
+                          style: theme.textTheme.labelLarge?.copyWith(
+                            color: colorScheme.onSurfaceVariant,
                           ),
-                          items: const [
-                            DropdownMenuItem(
-                              value: _RegisterMode.company,
-                              child: Text('Compte compagnie (proprietaire)'),
+                        ),
+                        const SizedBox(height: 8),
+                        Container(
+                          decoration: BoxDecoration(
+                            borderRadius: BorderRadius.circular(12),
+                            border: Border.all(
+                              color: colorScheme.outlineVariant,
                             ),
-                            DropdownMenuItem(
-                              value: _RegisterMode.staff,
-                              child: Text('Compte employe (manager/seller)'),
-                            ),
-                          ],
-                          onChanged: _isLoading
-                              ? null
-                              : (value) {
-                                  if (value == null) {
-                                    return;
-                                  }
-                                  setState(() {
-                                    _registerMode = value;
-                                  });
-                                },
+                          ),
+                          child: Column(
+                            children: [
+                              RadioListTile<_RegisterMode>(
+                                value: _RegisterMode.company,
+                                groupValue: _registerMode,
+                                onChanged: _isLoading
+                                    ? null
+                                    : (value) {
+                                        if (value == null) {
+                                          return;
+                                        }
+                                        setState(() {
+                                          _registerMode = value;
+                                        });
+                                      },
+                                title: const Text('Compte compagnie'),
+                                subtitle: const Text(
+                                  'Proprietaire de l entreprise',
+                                ),
+                                contentPadding: const EdgeInsets.symmetric(
+                                  horizontal: 12,
+                                ),
+                                visualDensity: VisualDensity.compact,
+                              ),
+                              const Divider(height: 1),
+                              RadioListTile<_RegisterMode>(
+                                value: _RegisterMode.staff,
+                                groupValue: _registerMode,
+                                onChanged: _isLoading
+                                    ? null
+                                    : (value) {
+                                        if (value == null) {
+                                          return;
+                                        }
+                                        setState(() {
+                                          _registerMode = value;
+                                        });
+                                      },
+                                title: const Text('Compte employe'),
+                                subtitle: const Text('Manager ou vendeur'),
+                                contentPadding: const EdgeInsets.symmetric(
+                                  horizontal: 12,
+                                ),
+                                visualDensity: VisualDensity.compact,
+                              ),
+                              const Divider(height: 1),
+                              RadioListTile<_RegisterMode>(
+                                value: _RegisterMode.provider,
+                                groupValue: _registerMode,
+                                onChanged: _isLoading
+                                    ? null
+                                    : (value) {
+                                        if (value == null) {
+                                          return;
+                                        }
+                                        setState(() {
+                                          _registerMode = value;
+                                        });
+                                      },
+                                title: const Text('Compte prestataire'),
+                                subtitle: const Text('Prestataire de services'),
+                                contentPadding: const EdgeInsets.symmetric(
+                                  horizontal: 12,
+                                ),
+                                visualDensity: VisualDensity.compact,
+                              ),
+                            ],
+                          ),
                         ),
                       ],
                       if (_isRegister &&
@@ -237,7 +298,9 @@ class _LoginScreenState extends State<LoginScreen> {
                               : _isRegister
                               ? _registerMode == _RegisterMode.company
                                     ? 'Creer le compte compagnie'
-                                    : 'Creer le compte employe'
+                                    : _registerMode == _RegisterMode.staff
+                                    ? 'Creer le compte employe'
+                                    : 'Creer le compte prestataire'
                               : 'Se connecter',
                         ),
                       ),
@@ -354,8 +417,13 @@ class _LoginScreenState extends State<LoginScreen> {
             password: password,
             companyName: company,
           );
-        } else {
+        } else if (_registerMode == _RegisterMode.staff) {
           await _authService.signUpStaffAccount(
+            email: email,
+            password: password,
+          );
+        } else {
+          await _authService.signUpProviderAccount(
             email: email,
             password: password,
           );
@@ -368,7 +436,9 @@ class _LoginScreenState extends State<LoginScreen> {
         return;
       }
 
-      if (_isRegister && _registerMode == _RegisterMode.staff) {
+      if (_isRegister &&
+          (_registerMode == _RegisterMode.staff ||
+              _registerMode == _RegisterMode.provider)) {
         setState(() {
           _isRegister = false;
         });

@@ -1,8 +1,8 @@
 import 'package:supabase_flutter/supabase_flutter.dart';
 
-import '../data/models/category_model.dart';
-import '../data/models/product_model.dart';
-import '../data/models/stock_movement_model.dart';
+import '../../data/models/category_model.dart';
+import '../../data/models/product_model.dart';
+import '../../data/models/stock_movement_model.dart';
 
 // Service d'acces aux donnees inventaire dans Supabase.
 // Toute lecture/ecriture passe par ce point pour centraliser les requetes SQL.

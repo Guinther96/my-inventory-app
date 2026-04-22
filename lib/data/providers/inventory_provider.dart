@@ -1,15 +1,23 @@
+import 'dart:async';
+
 import 'package:flutter/foundation.dart' show ChangeNotifier;
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 import '../models/category_model.dart';
+import '../models/company_model.dart';
 import '../models/product_model.dart';
 import '../models/stock_movement_model.dart';
-import '../../services/company_service.dart';
-import '../../services/inventory_supabase_service.dart';
+import '../../services/company/company_service.dart';
+import '../../services/inventory/inventory_supabase_service.dart';
 
 class InventoryProvider extends ChangeNotifier {
   final InventorySupabaseService _inventoryService = InventorySupabaseService();
   final CompanyService _companyService = CompanyService();
+
+  RealtimeChannel? _inventoryRealtimeChannel;
+  Timer? _realtimeReloadDebounce;
+  bool _isRealtimeReloading = false;
+  bool _hasPendingRealtimeReload = false;
 
   final List<Product> _products = [];
   final List<Category> _categories = [];
@@ -19,16 +27,17 @@ class InventoryProvider extends ChangeNotifier {
   bool _isInitialized = false;
   String? _companyId;
   String _companyName = 'Mon entreprise';
-  String _subscriptionStatus = 'unknown';
+  String? _companyEmail;
+  CompanyStatus _companyStatus = CompanyStatus.active;
   String? _errorMessage;
 
   bool get isLoading => _isLoading;
   bool get isInitialized => _isInitialized;
   String? get companyId => _companyId;
   String get companyName => _companyName;
-  String get subscriptionStatus => _subscriptionStatus;
-  bool get hasActiveSubscription =>
-      _subscriptionStatus == 'active' || _subscriptionStatus == 'trial';
+  String? get companyEmail => _companyEmail;
+  CompanyStatus get companyStatus => _companyStatus;
+  bool get hasActiveCompany => _companyStatus == CompanyStatus.active;
   String? get errorMessage => _errorMessage;
   bool get isAuthenticated => Supabase.instance.client.auth.currentUser != null;
 
@@ -64,10 +73,12 @@ class InventoryProvider extends ChangeNotifier {
     try {
       final user = Supabase.instance.client.auth.currentUser;
       if (user == null) {
+        _clearRealtimeResources();
         _clearCollections();
         _companyId = null;
         _companyName = 'Mon entreprise';
-        _subscriptionStatus = 'unknown';
+        _companyEmail = null;
+        _companyStatus = CompanyStatus.active;
         _isInitialized = true;
         return;
       }
@@ -75,9 +86,11 @@ class InventoryProvider extends ChangeNotifier {
       _companyId = await _companyService.ensureCurrentCompanyId();
 
       if (_companyId == null) {
+        _clearRealtimeResources();
         _clearCollections();
         _companyName = 'Mon entreprise';
-        _subscriptionStatus = 'unknown';
+        _companyEmail = null;
+        _companyStatus = CompanyStatus.active;
         _isInitialized = true;
         return;
       }
@@ -86,11 +99,12 @@ class InventoryProvider extends ChangeNotifier {
           await _companyService.fetchCompanyName(_companyId!) ??
           'Mon entreprise';
 
-      _subscriptionStatus =
-          await _companyService.fetchSubscriptionStatus(_companyId!) ??
-          'unknown';
+      _companyEmail = await _companyService.fetchCompanyEmail(_companyId!);
+
+      _companyStatus = await _companyService.fetchCompanyStatus(_companyId!);
 
       await _reloadRemoteData();
+      _configureRealtime(_companyId!);
       _isInitialized = true;
     } catch (e) {
       _errorMessage = e.toString();
@@ -309,6 +323,105 @@ class InventoryProvider extends ChangeNotifier {
       ..addAll(await _inventoryService.fetchMovements(tenantId));
   }
 
+  void _configureRealtime(String companyId) {
+    final client = Supabase.instance.client;
+
+    final existing = _inventoryRealtimeChannel;
+    if (existing != null) {
+      client.removeChannel(existing);
+      _inventoryRealtimeChannel = null;
+    }
+
+    _inventoryRealtimeChannel = client
+        .channel('inventory-realtime-$companyId')
+        .onPostgresChanges(
+          event: PostgresChangeEvent.all,
+          schema: 'public',
+          table: 'products',
+          filter: PostgresChangeFilter(
+            type: PostgresChangeFilterType.eq,
+            column: 'company_id',
+            value: companyId,
+          ),
+          callback: (_) => _scheduleRealtimeReload(),
+        )
+        .onPostgresChanges(
+          event: PostgresChangeEvent.all,
+          schema: 'public',
+          table: 'categories',
+          filter: PostgresChangeFilter(
+            type: PostgresChangeFilterType.eq,
+            column: 'company_id',
+            value: companyId,
+          ),
+          callback: (_) => _scheduleRealtimeReload(),
+        )
+        .onPostgresChanges(
+          event: PostgresChangeEvent.all,
+          schema: 'public',
+          table: 'stock_movements',
+          filter: PostgresChangeFilter(
+            type: PostgresChangeFilterType.eq,
+            column: 'company_id',
+            value: companyId,
+          ),
+          callback: (_) => _scheduleRealtimeReload(),
+        )
+        .subscribe();
+  }
+
+  void _scheduleRealtimeReload() {
+    if (_companyId == null) {
+      return;
+    }
+
+    _realtimeReloadDebounce?.cancel();
+    _realtimeReloadDebounce = Timer(const Duration(milliseconds: 250), () {
+      unawaited(_reloadFromRealtime());
+    });
+  }
+
+  Future<void> _reloadFromRealtime() async {
+    final tenantId = _companyId;
+    if (tenantId == null || !isAuthenticated) {
+      return;
+    }
+
+    if (_isRealtimeReloading) {
+      _hasPendingRealtimeReload = true;
+      return;
+    }
+
+    _isRealtimeReloading = true;
+
+    try {
+      await _reloadRemoteData();
+      notifyListeners();
+    } catch (e) {
+      _errorMessage = e.toString();
+      notifyListeners();
+    } finally {
+      _isRealtimeReloading = false;
+      if (_hasPendingRealtimeReload) {
+        _hasPendingRealtimeReload = false;
+        _scheduleRealtimeReload();
+      }
+    }
+  }
+
+  void _clearRealtimeResources() {
+    _realtimeReloadDebounce?.cancel();
+    _realtimeReloadDebounce = null;
+    _isRealtimeReloading = false;
+    _hasPendingRealtimeReload = false;
+
+    final channel = _inventoryRealtimeChannel;
+    if (channel != null) {
+      Supabase.instance.client.removeChannel(channel);
+      _inventoryRealtimeChannel = null;
+    }
+  }
+
   Future<void> _seedDemoDataRemote(String tenantId) async {
     final medecine = Category(
       id: '',
@@ -380,5 +493,11 @@ class InventoryProvider extends ChangeNotifier {
     _products.clear();
     _categories.clear();
     _movements.clear();
+  }
+
+  @override
+  void dispose() {
+    _clearRealtimeResources();
+    super.dispose();
   }
 }

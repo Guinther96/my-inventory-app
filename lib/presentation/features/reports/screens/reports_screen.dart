@@ -6,8 +6,8 @@ import '../../../../data/models/service_order_model.dart';
 import '../../../../data/models/stock_movement_model.dart';
 import '../../../../data/models/user_profile_model.dart';
 import '../../../../data/providers/inventory_provider.dart';
-import '../../../../services/service_order_service.dart';
-import '../../../../services/user_profile_service.dart';
+import '../../../../services/service_orders/service_order_service.dart';
+import '../../../../services/user/user_profile_service.dart';
 import '../../../common_widgets/app_drawer.dart';
 import '../../../common_widgets/app_sidebar.dart';
 
@@ -29,7 +29,6 @@ class _ReportsScreenState extends State<ReportsScreen> {
   bool _isSellersLoading = false;
   String? _sellersError;
   List<UserProfile> _companyUsers = const <UserProfile>[];
-  String? _selectedSellerForDetails;
 
   @override
   void initState() {
@@ -170,11 +169,11 @@ class _ReportsScreenState extends State<ReportsScreen> {
     }
 
     if (sellerId == 'unknown') {
-      return 'Seller inconnu';
+      return 'Caissier inconnu';
     }
 
     final shortId = sellerId.length > 8 ? sellerId.substring(0, 8) : sellerId;
-    return 'Seller $shortId';
+    return 'Caissier $shortId';
   }
 
   Future<List<ServiceOrder>> _loadSellerServiceOrders(String sellerId) async {
@@ -340,7 +339,7 @@ class _ReportsScreenState extends State<ReportsScreen> {
                       ),
                       const SizedBox(height: 20),
                       Text(
-                        'Resultats des sellers',
+                        'Resultats des caissiers',
                         style: Theme.of(context).textTheme.titleLarge?.copyWith(
                           fontWeight: FontWeight.w800,
                         ),
@@ -506,7 +505,7 @@ class _SellerResultsSectionState extends State<_SellerResultsSection> {
   @override
   Widget build(BuildContext context) {
     if (widget.results.isEmpty) {
-      return const Text('Aucune vente seller disponible pour le moment.');
+      return const Text('Aucune vente caissier disponible pour le moment.');
     }
 
     final sortedResults = [...widget.results]
@@ -549,7 +548,7 @@ class _SellerResultsSectionState extends State<_SellerResultsSection> {
             runSpacing: 8,
             children: [
               Text(
-                'Sellers: ${sortedResults.length}',
+                'Caissiers: ${sortedResults.length}',
                 style: TextStyle(
                   color: Theme.of(context).colorScheme.onPrimaryContainer,
                   fontWeight: FontWeight.w700,
@@ -653,7 +652,9 @@ class _SellerResultsSectionState extends State<_SellerResultsSection> {
                   return const SizedBox(
                     height: 140,
                     child: Center(
-                      child: Text('Impossible de charger les détails seller.'),
+                      child: Text(
+                        'Impossible de charger les détails caissier.',
+                      ),
                     ),
                   );
                 }

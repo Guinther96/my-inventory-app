@@ -1,7 +1,9 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:go_router/go_router.dart';
 
-import '../../../../services/auth_service.dart';
+import '../../../../core/constants/app_constants.dart';
+import '../../../../services/auth/auth_service.dart';
 
 class ForgotPasswordScreen extends StatefulWidget {
   const ForgotPasswordScreen({super.key, this.initialEmail = ''});
@@ -50,7 +52,7 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen> {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
           content: Text(
-            'Email de reinitialisation envoye. Verifiez votre boite mail et le dossier spam.',
+            'Si un compte existe avec cet email, un lien de reinitialisation a ete envoye. Verifiez votre boite mail et le dossier spam.',
           ),
           backgroundColor: Colors.green,
         ),
@@ -77,6 +79,8 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen> {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final colorScheme = theme.colorScheme;
+    final missingResetRedirect =
+        kIsWeb && AppConstants.passwordResetRedirectUrl == null;
 
     return Scaffold(
       backgroundColor: theme.scaffoldBackgroundColor,
@@ -121,6 +125,21 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen> {
                           fontSize: 13,
                         ),
                       ),
+                      if (missingResetRedirect) ...[
+                        const SizedBox(height: 12),
+                        Container(
+                          padding: const EdgeInsets.all(10),
+                          decoration: BoxDecoration(
+                            color: Colors.amber.shade50,
+                            borderRadius: BorderRadius.circular(10),
+                            border: Border.all(color: Colors.amber.shade300),
+                          ),
+                          child: const Text(
+                            'Configuration manquante: PASSWORD_RESET_REDIRECT_URL. Sans URL publique autorisee dans Supabase, les emails de reinitialisation peuvent echouer.',
+                            style: TextStyle(fontSize: 12),
+                          ),
+                        ),
+                      ],
                       const SizedBox(height: 24),
                       TextFormField(
                         controller: _emailController,

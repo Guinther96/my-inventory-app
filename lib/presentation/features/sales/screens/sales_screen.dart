@@ -11,6 +11,8 @@ import '../../../../data/models/stock_movement_model.dart';
 
 // Imports du provider de gestion d'inventaire
 import '../../../../data/providers/inventory_provider.dart';
+import '../../../../services/features/feature_service.dart';
+import '../../../../services/printer/printer_service.dart';
 
 // Imports des widgets communs (barre latérale, drawer)
 import '../../../common_widgets/app_drawer.dart';
@@ -35,6 +37,7 @@ class SalesScreen extends StatefulWidget {
 class _SalesScreenState extends State<SalesScreen> {
   /// Contrôleur pour la note/commentaire du ticket
   final TextEditingController _notesController = TextEditingController();
+  final GlobalKey _mobileTicketPanelKey = GlobalKey();
 
   /// Dictionnaire stockant les lignes du panier (productId -> CartLine)
   /// Permet une gestion rapide des articles du panier
@@ -63,6 +66,20 @@ class _SalesScreenState extends State<SalesScreen> {
     super.dispose();
   }
 
+  Future<void> _scrollToMobileTicketPanel() async {
+    final context = _mobileTicketPanelKey.currentContext;
+    if (context == null) {
+      return;
+    }
+
+    await Scrollable.ensureVisible(
+      context,
+      duration: const Duration(milliseconds: 280),
+      curve: Curves.easeOutCubic,
+      alignment: 0.02,
+    );
+  }
+
   /// Construit l'interface utilisateur principale du mode caisse
   /// Adapte l'affichage selon la taille de l'écran (desktop/tablette/mobile)
   @override
@@ -82,6 +99,40 @@ class _SalesScreenState extends State<SalesScreen> {
       drawer: isDesktop ? null : const AppDrawer(),
       // Couleur de fond légère pour l'interface POS
       backgroundColor: Theme.of(context).scaffoldBackgroundColor,
+      bottomNavigationBar: isDesktop
+          ? null
+          : Consumer<InventoryProvider>(
+              builder: (context, inventory, _) {
+                final entries = _resolveCartEntries(inventory);
+                if (entries.isEmpty) {
+                  return const SizedBox.shrink();
+                }
+
+                final selectedEntry = _selectedCartEntry(entries);
+                final totalItems = entries.fold<int>(
+                  0,
+                  (sum, entry) => sum + entry.quantity,
+                );
+                final cartTotal = entries.fold<double>(
+                  0,
+                  (sum, entry) => sum + entry.lineTotal,
+                );
+
+                return _SelectedProductBottomBar(
+                  entries: entries,
+                  selectedEntry: selectedEntry,
+                  totalItems: totalItems,
+                  cartTotal: cartTotal,
+                  onIncrement: selectedEntry == null
+                      ? null
+                      : () => _changeQuantity(selectedEntry.product, 1),
+                  onDecrement: selectedEntry == null
+                      ? null
+                      : () => _changeQuantity(selectedEntry.product, -1),
+                  onTapTicket: _scrollToMobileTicketPanel,
+                );
+              },
+            ),
       body: Row(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
@@ -229,29 +280,33 @@ class _SalesScreenState extends State<SalesScreen> {
                                 cartTotal: cartTotal,
                               ),
                               const SizedBox(height: 12),
-                              _TicketPanel(
-                                entries: cartEntries,
-                                selectedProductId: _selectedCartProductId,
-                                selectedEntry: selectedCartEntry,
-                                notesController: _notesController,
-                                totalItems: totalItems,
-                                cartTotal: cartTotal,
-                                isSubmitting: _isSubmitting,
-                                compact: true,
-                                onSelectEntry: _selectCartProduct,
-                                onIncrement: (product) =>
-                                    _changeQuantity(product, 1),
-                                onDecrement: (product) =>
-                                    _changeQuantity(product, -1),
-                                onRemove: _removeFromCart,
-                                onQuickAdd: (value) =>
-                                    _applyQuickQuantity(value, inventory),
-                                onClear: _cartLines.isEmpty || _isSubmitting
-                                    ? null
-                                    : _clearCart,
-                                onCheckout: _cartLines.isEmpty || _isSubmitting
-                                    ? null
-                                    : () => _checkoutCart(context, inventory),
+                              KeyedSubtree(
+                                key: _mobileTicketPanelKey,
+                                child: _TicketPanel(
+                                  entries: cartEntries,
+                                  selectedProductId: _selectedCartProductId,
+                                  selectedEntry: selectedCartEntry,
+                                  notesController: _notesController,
+                                  totalItems: totalItems,
+                                  cartTotal: cartTotal,
+                                  isSubmitting: _isSubmitting,
+                                  compact: true,
+                                  onSelectEntry: _selectCartProduct,
+                                  onIncrement: (product) =>
+                                      _changeQuantity(product, 1),
+                                  onDecrement: (product) =>
+                                      _changeQuantity(product, -1),
+                                  onRemove: _removeFromCart,
+                                  onQuickAdd: (value) =>
+                                      _applyQuickQuantity(value, inventory),
+                                  onClear: _cartLines.isEmpty || _isSubmitting
+                                      ? null
+                                      : _clearCart,
+                                  onCheckout:
+                                      _cartLines.isEmpty || _isSubmitting
+                                      ? null
+                                      : () => _checkoutCart(context, inventory),
+                                ),
                               ),
                               const SizedBox(height: 12),
                               _CatalogPanel(
@@ -601,6 +656,8 @@ class _SalesScreenState extends State<SalesScreen> {
         );
       }
 
+      await _tryPrintSaleReceipt(context, inventory, checkoutLines);
+
       // Vérifie que le contexte est toujours valide après les appels async
       if (!context.mounted) {
         return;
@@ -632,6 +689,71 @@ class _SalesScreenState extends State<SalesScreen> {
       // Désactive le flag de soumission si le widget est toujours monté
       if (mounted) {
         setState(() => _isSubmitting = false);
+      }
+    }
+  }
+
+  Future<void> _tryPrintSaleReceipt(
+    BuildContext context,
+    InventoryProvider inventory,
+    List<_CartLine> checkoutLines,
+  ) async {
+    if (!FeatureService.isEnabled('print')) {
+      return;
+    }
+
+    try {
+      final connected = await PrinterService.isConnected();
+      if (!connected) {
+        if (context.mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text('Imprimante non connectee. Vente enregistree.'),
+            ),
+          );
+        }
+        return;
+      }
+
+      final items = <Map<String, dynamic>>[];
+      for (final line in checkoutLines) {
+        final product = inventory.findProductById(line.productId);
+        if (product == null) {
+          continue;
+        }
+
+        items.add(<String, dynamic>{
+          'name': product.name,
+          'quantity': line.quantity,
+          'price': product.price,
+        });
+      }
+
+      if (items.isEmpty) {
+        return;
+      }
+
+      final total = items.fold<double>(
+        0,
+        (sum, item) =>
+            sum + ((item['quantity'] as int) * (item['price'] as double)),
+      );
+
+      await PrinterService.printSaleReceipt(
+        companyName: inventory.companyName,
+        companyEmail: inventory.companyEmail,
+        items: items,
+        total: total,
+      );
+    } catch (e, st) {
+      debugPrint('Print sale receipt failed: $e');
+      debugPrint('$st');
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Vente enregistree, impression indisponible.'),
+          ),
+        );
       }
     }
   }
@@ -971,18 +1093,22 @@ class _TicketPanel extends StatelessWidget {
             ),
           ),
           const SizedBox(width: 12),
-          const Expanded(
+          Expanded(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text(
+                const Text(
                   'Ticket en cours',
                   style: TextStyle(fontSize: 20, fontWeight: FontWeight.w800),
                 ),
-                SizedBox(height: 2),
+                const SizedBox(height: 2),
                 Text(
                   'Ajoutez des produits puis validez la vente.',
-                  style: TextStyle(color: Color(0xFF617287)),
+                  style: TextStyle(
+                    color: Theme.of(
+                      context,
+                    ).textTheme.bodyMedium?.color?.withValues(alpha: 0.7),
+                  ),
                 ),
               ],
             ),
@@ -1388,24 +1514,28 @@ class _EmptyCartState extends StatelessWidget {
               : const Color(0xFFDCE6F2),
         ),
       ),
-      child: const Column(
+      child: Column(
         mainAxisSize: MainAxisSize.min,
         children: [
-          Icon(
+          const Icon(
             Icons.shopping_cart_outlined,
             size: 38,
             color: Color(0xFF94A3B8),
           ),
-          SizedBox(height: 10),
-          Text(
+          const SizedBox(height: 10),
+          const Text(
             'Le panier est vide',
             style: TextStyle(fontWeight: FontWeight.w700),
           ),
-          SizedBox(height: 4),
+          const SizedBox(height: 4),
           Text(
             'Selectionnez des produits a droite pour demarrer une vente.',
             textAlign: TextAlign.center,
-            style: TextStyle(color: Color(0xFF617287)),
+            style: TextStyle(
+              color: Theme.of(
+                context,
+              ).textTheme.bodyMedium?.color?.withValues(alpha: 0.7),
+            ),
           ),
         ],
       ),
@@ -1624,6 +1754,241 @@ class _QuickQuantityPanel extends StatelessWidget {
   }
 }
 
+class _SelectedProductBottomBar extends StatelessWidget {
+  final List<_CartEntryData> entries;
+  final _CartEntryData? selectedEntry;
+  final int totalItems;
+  final double cartTotal;
+  final VoidCallback? onIncrement;
+  final VoidCallback? onDecrement;
+  final VoidCallback onTapTicket;
+
+  const _SelectedProductBottomBar({
+    required this.entries,
+    required this.selectedEntry,
+    required this.totalItems,
+    required this.cartTotal,
+    required this.onIncrement,
+    required this.onDecrement,
+    required this.onTapTicket,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final productCount = entries.length;
+    final previewText = entries
+        .take(3)
+        .map((entry) => '${entry.product.name} x${entry.quantity}')
+        .join('  •  ');
+    final hasMoreEntries = productCount > 3;
+    final selectedProductName = selectedEntry?.product.name;
+
+    return SafeArea(
+      top: false,
+      child: Container(
+        padding: const EdgeInsets.fromLTRB(12, 8, 12, 8),
+        decoration: BoxDecoration(
+          color: Theme.of(context).scaffoldBackgroundColor,
+          boxShadow: const [
+            BoxShadow(
+              color: Color(0x1A000000),
+              blurRadius: 10,
+              offset: Offset(0, -3),
+            ),
+          ],
+        ),
+        child: Material(
+          color: const Color(0xFF0F172A),
+          borderRadius: BorderRadius.circular(16),
+          child: InkWell(
+            onTap: onTapTicket,
+            borderRadius: BorderRadius.circular(16),
+            child: Container(
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+              child: LayoutBuilder(
+                builder: (context, constraints) {
+                  final isNarrow = constraints.maxWidth < 380;
+                  final detailsText =
+                      '$totalItems article${totalItems > 1 ? 's' : ''} • ${cartTotal.toStringAsFixed(2)} Gdes';
+
+                  Widget quantityControls({bool alignEnd = true}) {
+                    return Column(
+                      mainAxisSize: MainAxisSize.min,
+                      crossAxisAlignment: alignEnd
+                          ? CrossAxisAlignment.end
+                          : CrossAxisAlignment.start,
+                      children: [
+                        TextButton.icon(
+                          onPressed: onTapTicket,
+                          style: TextButton.styleFrom(
+                            foregroundColor: Colors.white,
+                            minimumSize: const Size(0, 36),
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 10,
+                              vertical: 8,
+                            ),
+                          ),
+                          icon: const Icon(Icons.receipt_long, size: 16),
+                          label: const Text('Voir'),
+                        ),
+                        if (selectedEntry != null) ...[
+                          const SizedBox(height: 6),
+                          Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              _BottomQtyButton(
+                                icon: Icons.remove,
+                                onPressed: onDecrement,
+                              ),
+                              Container(
+                                width: 42,
+                                alignment: Alignment.center,
+                                child: Text(
+                                  '${selectedEntry!.quantity}',
+                                  style: const TextStyle(
+                                    color: Colors.white,
+                                    fontWeight: FontWeight.w800,
+                                  ),
+                                ),
+                              ),
+                              _BottomQtyButton(
+                                icon: Icons.add,
+                                onPressed: onIncrement,
+                              ),
+                            ],
+                          ),
+                          if (!isNarrow && selectedProductName != null) ...[
+                            const SizedBox(height: 4),
+                            SizedBox(
+                              width: 118,
+                              child: Text(
+                                selectedProductName,
+                                maxLines: 1,
+                                textAlign: TextAlign.right,
+                                overflow: TextOverflow.ellipsis,
+                                style: const TextStyle(
+                                  color: Colors.white60,
+                                  fontSize: 11,
+                                ),
+                              ),
+                            ),
+                          ],
+                        ],
+                      ],
+                    );
+                  }
+
+                  if (isNarrow) {
+                    return Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Text(
+                          productCount == 1
+                              ? '1 produit dans le ticket'
+                              : '$productCount produits dans le ticket',
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: const TextStyle(
+                            color: Colors.white,
+                            fontWeight: FontWeight.w700,
+                          ),
+                        ),
+                        const SizedBox(height: 2),
+                        Text(
+                          detailsText,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: const TextStyle(color: Colors.white70),
+                        ),
+                        const SizedBox(height: 8),
+                        quantityControls(alignEnd: false),
+                      ],
+                    );
+                  }
+
+                  return Row(
+                    crossAxisAlignment: CrossAxisAlignment.center,
+                    children: [
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Text(
+                              productCount == 1
+                                  ? '1 produit dans le ticket'
+                                  : '$productCount produits dans le ticket',
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                              style: const TextStyle(
+                                color: Colors.white,
+                                fontWeight: FontWeight.w700,
+                              ),
+                            ),
+                            const SizedBox(height: 2),
+                            Text(
+                              detailsText,
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                              style: const TextStyle(color: Colors.white70),
+                            ),
+                            const SizedBox(height: 6),
+                            Text(
+                              hasMoreEntries
+                                  ? '$previewText  •  ...'
+                                  : previewText,
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                              style: const TextStyle(
+                                color: Colors.white60,
+                                fontSize: 12,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                      const SizedBox(width: 8),
+                      quantityControls(),
+                    ],
+                  );
+                },
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _BottomQtyButton extends StatelessWidget {
+  final IconData icon;
+  final VoidCallback? onPressed;
+
+  const _BottomQtyButton({required this.icon, required this.onPressed});
+
+  @override
+  Widget build(BuildContext context) {
+    return SizedBox(
+      width: 34,
+      height: 34,
+      child: OutlinedButton(
+        onPressed: onPressed,
+        style: OutlinedButton.styleFrom(
+          padding: EdgeInsets.zero,
+          side: const BorderSide(color: Colors.white24),
+          foregroundColor: Colors.white,
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(10),
+          ),
+        ),
+        child: Icon(icon, size: 16),
+      ),
+    );
+  }
+}
+
 /// Panneau droit du POS: catalogue de produits avec recherche et filtres par catégorie
 /// Affiche les produits en grille, permet recherche textuelle et filtrage par catégorie
 /// Responsive: colonnes variables selon la taille d'écran (tablet/desktop/mobile)
@@ -1659,6 +2024,34 @@ class _CatalogPanel extends StatelessWidget {
     this.compact = false,
   });
 
+  void _openRecentSalesBottomSheet(BuildContext context) {
+    showModalBottomSheet<void>(
+      context: context,
+      isScrollControlled: true,
+      useSafeArea: true,
+      backgroundColor: Colors.transparent,
+      builder: (sheetContext) {
+        final maxHeight = MediaQuery.of(sheetContext).size.height * 0.82;
+        return Container(
+          constraints: BoxConstraints(maxHeight: maxHeight),
+          decoration: BoxDecoration(
+            color: Theme.of(sheetContext).scaffoldBackgroundColor,
+            borderRadius: const BorderRadius.vertical(top: Radius.circular(22)),
+          ),
+          child: Padding(
+            padding: const EdgeInsets.fromLTRB(12, 8, 12, 12),
+            child: SingleChildScrollView(
+              child: _RecentSalesPanel(
+                sales: recentSales,
+                inventory: inventory,
+              ),
+            ),
+          ),
+        );
+      },
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     return Column(
@@ -1681,11 +2074,16 @@ class _CatalogPanel extends StatelessWidget {
           maxCrossAxisExtent: isTablet ? 220 : 180,
           onAddToCart: onAddToCart,
         ),
-        // En mode desktop, on donne toute la hauteur disponible à la grille produits
-        // pour une meilleure visibilité des cartes. L'historique reste visible en mode compact.
         if (compact) ...[
           const SizedBox(height: 16),
-          _RecentSalesPanel(sales: recentSales, inventory: inventory),
+          Align(
+            alignment: Alignment.centerLeft,
+            child: OutlinedButton.icon(
+              onPressed: () => _openRecentSalesBottomSheet(context),
+              icon: const Icon(Icons.history),
+              label: const Text('Historique recent des tickets'),
+            ),
+          ),
         ],
       ],
     );
@@ -1981,23 +2379,31 @@ class _EmptyCatalogState extends StatelessWidget {
             : Colors.white,
         borderRadius: BorderRadius.circular(28),
       ),
-      child: const Column(
+      child: Column(
         mainAxisSize: MainAxisSize.min,
         children: [
           // Icône de catalogue vide
-          Icon(Icons.inventory_2_outlined, size: 40, color: Color(0xFF94A3B8)),
-          SizedBox(height: 12),
+          const Icon(
+            Icons.inventory_2_outlined,
+            size: 40,
+            color: Color(0xFF94A3B8),
+          ),
+          const SizedBox(height: 12),
           // Message d'état vide
-          Text(
+          const Text(
             'Aucun produit a afficher',
             style: TextStyle(fontWeight: FontWeight.w700),
           ),
-          SizedBox(height: 4),
+          const SizedBox(height: 4),
           // Suggestion d'action
           Text(
             'Essayez une autre recherche ou une autre categorie.',
             textAlign: TextAlign.center,
-            style: TextStyle(color: Color(0xFF617287)),
+            style: TextStyle(
+              color: Theme.of(
+                context,
+              ).textTheme.bodyMedium?.color?.withValues(alpha: 0.7),
+            ),
           ),
         ],
       ),
@@ -2367,7 +2773,13 @@ class _RecentSalesPanel extends StatelessWidget {
                           const SizedBox(height: 3),
                           Text(
                             '$dateText • Qt: ${sale.quantity}',
-                            style: const TextStyle(color: Color(0xFF617287)),
+                            style: TextStyle(
+                              color: Theme.of(context)
+                                  .textTheme
+                                  .bodyMedium
+                                  ?.color
+                                  ?.withValues(alpha: 0.7),
+                            ),
                           ),
                         ],
                       ),
@@ -2421,3 +2833,4 @@ class _CartEntryData {
   /// Calcule le montant total de cette ligne (prix unitaire × quantité)
   double get lineTotal => product.price * quantity;
 }
+

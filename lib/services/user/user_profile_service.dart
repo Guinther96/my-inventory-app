@@ -1,6 +1,7 @@
 import 'package:supabase_flutter/supabase_flutter.dart';
 
-import '../data/models/user_profile_model.dart';
+import '../../core/security/route_access_guard.dart';
+import '../../data/models/user_profile_model.dart';
 
 class UserProfileService {
   SupabaseClient get _client => Supabase.instance.client;
@@ -53,7 +54,11 @@ class UserProfileService {
           .maybeSingle();
 
       final rawRole = row?['role']?.toString().toLowerCase() ?? 'seller';
-      final role = rawRole == 'manager' ? AppRole.manager : AppRole.seller;
+      final role = rawRole == 'manager'
+        ? AppRole.manager
+        : rawRole == 'provider'
+        ? AppRole.provider
+        : AppRole.seller;
 
       _roleCache[userId] = _RoleCache(
         role: role,
@@ -67,18 +72,19 @@ class UserProfileService {
   }
 
   Future<bool> canAccessRoute(String route) async {
-    final role = await fetchCurrentRole();
-
-    if (role == AppRole.manager) {
-      return true;
-    }
-
-    return _sellerAllowedRoute(route);
+    final decision = await RouteAccessGuard.evaluate(route);
+    return decision.allowed;
   }
 
   Future<String> defaultHomeRoute() async {
     final role = await fetchCurrentRole();
-    return role == AppRole.manager ? '/' : '/sales';
+    if (role == AppRole.manager) {
+      return '/';
+    }
+    if (role == AppRole.provider) {
+      return '/provider/dashboard';
+    }
+    return '/sales';
   }
 
   Future<bool> fetchMustChangePassword() async {
@@ -154,9 +160,9 @@ class UserProfileService {
     }
   }
 
-  Future<void> removeSellerFromCompany({required String userId}) async {
+  Future<void> removeUserFromCompany({required String userId}) async {
     await _client.rpc(
-      'remove_seller_from_company',
+      'remove_user_from_company',
       params: {'p_user_id': userId},
     );
 
@@ -180,37 +186,12 @@ class UserProfileService {
     return row?['company_id']?.toString();
   }
 
-  bool _sellerAllowedRoute(String route) {
-    if (route.startsWith('/sales')) {
-      return true;
-    }
-    if (route.startsWith('/beauty/services')) {
-      return true;
-    }
-    if (route.startsWith('/beauty/reservations')) {
-      return true;
-    }
-    if (route.startsWith('/beauty/orders/new')) {
-      return true;
-    }
-    if (route.startsWith('/settings')) {
-      return true;
-    }
-    if (route.startsWith('/change-password')) {
-      return true;
-    }
-    if (route.startsWith('/users')) {
-      return false;
-    }
-    return route == '/' || route == '/login';
-  }
-
   String _readableAssignmentError(PostgrestException error) {
     final message = error.message.trim();
     final lower = message.toLowerCase();
 
     if (lower.contains('aucun compte trouve pour cet email')) {
-      return 'Aucun compte employe n\'existe pour cet email. Creez d\'abord ce compte depuis Connexion > Creer un nouveau compte > Compte employe, puis revenez ici pour l\'ajouter.';
+      return 'Aucun compte employe/prestataire n\'existe pour cet email. Creez d\'abord ce compte depuis Connexion > Creer un nouveau compte, puis revenez ici pour l\'ajouter.';
     }
 
     if (lower.contains('manager role required')) {

@@ -7,9 +7,11 @@ import '../../../common_widgets/app_sidebar.dart';
 import '../../../../../data/models/client_model.dart';
 import '../../../../../data/models/reservation_model.dart';
 import '../../../../../data/models/service_model.dart';
-import '../../../../../services/reservation_service.dart';
-import '../../../../../services/service_service.dart';
-import '../../../../../services/service_order_service.dart';
+import '../../../../../data/models/provider_reservation_model.dart';
+import '../../../../../services/service_orders/reservation_service.dart';
+import '../../../../../services/service_orders/service_service.dart';
+import '../../../../../services/service_orders/service_order_service.dart';
+import '../../../../../services/provider/provider_reservation_service.dart';
 
 class ReservationScreen extends StatefulWidget {
   const ReservationScreen({super.key});
@@ -22,6 +24,8 @@ class _ReservationScreenState extends State<ReservationScreen> {
   final ReservationService _reservationService = ReservationService();
   final ServiceService _serviceService = ServiceService();
   final ServiceOrderService _serviceOrderService = ServiceOrderService();
+  final ProviderReservationService _providerReservationService =
+      ProviderReservationService();
 
   bool _isLoading = true;
   bool _isSubmitting = false;
@@ -30,6 +34,8 @@ class _ReservationScreenState extends State<ReservationScreen> {
   List<Service> _services = const <Service>[];
   List<Client> _clients = const <Client>[];
   List<Reservation> _reservations = const <Reservation>[];
+  List<ProviderReservation> _providerReservations =
+      const <ProviderReservation>[];
 
   Client? _selectedClient;
   String? _selectedServiceId;
@@ -65,6 +71,7 @@ class _ReservationScreenState extends State<ReservationScreen> {
         _serviceService.fetchServices(),
         _serviceOrderService.fetchClients(),
         _reservationService.fetchReservations(),
+        _providerReservationService.fetchCompanyReservations(),
       ]);
 
       if (!mounted) {
@@ -75,6 +82,7 @@ class _ReservationScreenState extends State<ReservationScreen> {
         _services = results[0] as List<Service>;
         _clients = results[1] as List<Client>;
         _reservations = results[2] as List<Reservation>;
+        _providerReservations = results[3] as List<ProviderReservation>;
       });
     } catch (e) {
       if (!mounted) {
@@ -185,6 +193,44 @@ class _ReservationScreenState extends State<ReservationScreen> {
     context.go('/beauty/orders/new', extra: reservation);
   }
 
+  Future<void> _deleteReservation(Reservation reservation) async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (dialogContext) {
+        return AlertDialog(
+          title: const Text('Supprimer la reservation'),
+          content: Text(
+            'Voulez-vous vraiment supprimer la reservation de ${reservation.clientName} ?',
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(dialogContext).pop(false),
+              child: const Text('Annuler'),
+            ),
+            FilledButton(
+              onPressed: () => Navigator.of(dialogContext).pop(true),
+              child: const Text('Supprimer'),
+            ),
+          ],
+        );
+      },
+    );
+
+    if (confirmed != true) {
+      return;
+    }
+
+    try {
+      await _reservationService.deleteReservation(
+        reservationId: reservation.id,
+      );
+      await _load();
+      _show('Reservation supprimee.');
+    } catch (e) {
+      _show('Erreur suppression: $e');
+    }
+  }
+
   void _show(String message) {
     if (!mounted) {
       return;
@@ -281,6 +327,7 @@ class _ReservationScreenState extends State<ReservationScreen> {
                                 const SizedBox(height: 12),
                                 DropdownButtonFormField<Client>(
                                   initialValue: selectedClientValue,
+                                  isExpanded: true,
                                   decoration: const InputDecoration(
                                     labelText: 'Client existant (optionnel)',
                                   ),
@@ -290,6 +337,8 @@ class _ReservationScreenState extends State<ReservationScreen> {
                                           value: client,
                                           child: Text(
                                             '${client.fullName} ${client.phone ?? ''}',
+                                            maxLines: 1,
+                                            overflow: TextOverflow.ellipsis,
                                           ),
                                         ),
                                       )
@@ -321,6 +370,7 @@ class _ReservationScreenState extends State<ReservationScreen> {
                                 const SizedBox(height: 10),
                                 DropdownButtonFormField<String>(
                                   initialValue: selectedServiceIdValue,
+                                  isExpanded: true,
                                   decoration: const InputDecoration(
                                     labelText: 'Service demande',
                                   ),
@@ -329,7 +379,9 @@ class _ReservationScreenState extends State<ReservationScreen> {
                                         (service) => DropdownMenuItem<String>(
                                           value: service.id,
                                           child: Text(
-                                            '${service.name} (${service.price.toStringAsFixed(2)})',
+                                            '${service.name} (${service.price.toStringAsFixed(2)} Gdes)',
+                                            maxLines: 1,
+                                            overflow: TextOverflow.ellipsis,
                                           ),
                                         ),
                                       )
@@ -373,6 +425,71 @@ class _ReservationScreenState extends State<ReservationScreen> {
                         ),
                         const SizedBox(height: 16),
                         Text(
+                          'Reservations Prestataire',
+                          style: Theme.of(context).textTheme.titleLarge,
+                        ),
+                        const SizedBox(height: 8),
+                        if (_providerReservations.isEmpty)
+                          const Card(
+                            child: Padding(
+                              padding: EdgeInsets.all(12),
+                              child: Text('Aucune reservation prestataire.'),
+                            ),
+                          )
+                        else
+                          ..._providerReservations.map((reservation) {
+                            return Card(
+                              color: Colors.blue.shade50,
+                              child: Padding(
+                                padding: const EdgeInsets.all(12),
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    Row(
+                                      children: [
+                                        Expanded(
+                                          child: Text(
+                                            '${reservation.clientName} - ${reservation.serviceName}',
+                                            style: Theme.of(context)
+                                                .textTheme
+                                                .titleMedium
+                                                ?.copyWith(
+                                                  fontWeight: FontWeight.w700,
+                                                ),
+                                          ),
+                                        ),
+                                        Container(
+                                          padding: const EdgeInsets.symmetric(
+                                            horizontal: 8,
+                                            vertical: 4,
+                                          ),
+                                          decoration: BoxDecoration(
+                                            color: Colors.blue,
+                                            borderRadius: BorderRadius.circular(
+                                              4,
+                                            ),
+                                          ),
+                                          child: const Text(
+                                            'Prestataire',
+                                            style: TextStyle(
+                                              color: Colors.white,
+                                              fontSize: 12,
+                                              fontWeight: FontWeight.w600,
+                                            ),
+                                          ),
+                                        ),
+                                      ],
+                                    ),
+                                    const SizedBox(height: 6),
+                                    Text(
+                                      '${DateFormat('dd/MM/yyyy HH:mm').format(DateTime(reservation.date.year, reservation.date.month, reservation.date.day, int.parse(reservation.time.split(':')[0]), int.parse(reservation.time.split(':')[1])))} | HTG ${reservation.price.toStringAsFixed(2)} | ${reservation.status}',
+                                    ),
+                                  ],
+                                ),
+                              ),
+                            );
+                          }),
+                        Text(
                           'Liste des reservations',
                           style: Theme.of(context).textTheme.titleLarge,
                         ),
@@ -394,20 +511,49 @@ class _ReservationScreenState extends State<ReservationScreen> {
                                 reservation.status != 'cancelled';
 
                             return Card(
-                              child: ListTile(
-                                title: Text(
-                                  '${reservation.clientName} - ${service?.name ?? 'Service inconnu'}',
+                              child: Padding(
+                                padding: const EdgeInsets.all(12),
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    Text(
+                                      '${reservation.clientName} - ${service?.name ?? 'Service inconnu'}',
+                                      style: Theme.of(context)
+                                          .textTheme
+                                          .titleMedium
+                                          ?.copyWith(
+                                            fontWeight: FontWeight.w700,
+                                          ),
+                                    ),
+                                    const SizedBox(height: 6),
+                                    Text(
+                                      '${DateFormat('dd/MM/yyyy HH:mm').format(reservation.reservedAt)} | ${reservation.phone ?? '-'} | ${reservation.status}',
+                                    ),
+                                    const SizedBox(height: 10),
+                                    Wrap(
+                                      spacing: 8,
+                                      runSpacing: 8,
+                                      children: [
+                                        if (canConvert)
+                                          FilledButton(
+                                            onPressed: () =>
+                                                _convertToOrder(reservation),
+                                            child: const Text(
+                                              'Paiement + ticket',
+                                            ),
+                                          ),
+                                        OutlinedButton.icon(
+                                          onPressed: () =>
+                                              _deleteReservation(reservation),
+                                          icon: const Icon(
+                                            Icons.delete_outline,
+                                          ),
+                                          label: const Text('Supprimer'),
+                                        ),
+                                      ],
+                                    ),
+                                  ],
                                 ),
-                                subtitle: Text(
-                                  '${DateFormat('dd/MM/yyyy HH:mm').format(reservation.reservedAt)} | ${reservation.phone ?? '-'} | ${reservation.status}',
-                                ),
-                                trailing: canConvert
-                                    ? FilledButton(
-                                        onPressed: () =>
-                                            _convertToOrder(reservation),
-                                        child: const Text('Paiement + ticket'),
-                                      )
-                                    : null,
                               ),
                             );
                           }),

@@ -63,4 +63,11 @@ class Client {
       'notes': notes,
     };
   }
+
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) || (other is Client && other.id == id);
+
+  @override
+  int get hashCode => id.hashCode;
 }

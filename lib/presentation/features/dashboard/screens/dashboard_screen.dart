@@ -6,9 +6,10 @@ import 'package:provider/provider.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 import '../../../../data/models/service_order_model.dart';
+import '../../../../data/models/stock_movement_model.dart';
 import '../../../../data/providers/inventory_provider.dart';
 import '../../../../data/providers/user_profile_provider.dart';
-import '../../../../services/service_order_service.dart';
+import '../../../../services/service_orders/service_order_service.dart';
 import '../../../common_widgets/app_drawer.dart';
 import '../../../common_widgets/app_sidebar.dart';
 
@@ -26,6 +27,7 @@ class DashboardScreen extends StatefulWidget {
 class _DashboardScreenState extends State<DashboardScreen> {
   int _selectedSalesWindowDays = 7;
   int _selectedVisitsWindowDays = 7;
+  String? _selectedRecentMovementId;
   final ServiceOrderService _serviceOrderService = ServiceOrderService();
   RealtimeChannel? _serviceOrdersRealtimeChannel;
   Timer? _visitsRealtimeDebounce;
@@ -249,6 +251,14 @@ class _DashboardScreenState extends State<DashboardScreen> {
         .toList();
   }
 
+  String _movementDropdownKey(StockMovement movement, int index) {
+    final rawId = movement.id.trim();
+    final stableId = rawId.isNotEmpty ? rawId : 'missing';
+
+    // Always include index to guarantee unique values, even with duplicate IDs.
+    return 'id:$stableId:ts:${movement.createdAt.microsecondsSinceEpoch}:i:$index';
+  }
+
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
@@ -271,6 +281,20 @@ class _DashboardScreenState extends State<DashboardScreen> {
             child: Consumer<InventoryProvider>(
               builder: (context, inventory, _) {
                 final recent = inventory.recentMovements.take(10).toList();
+                final recentOptions = recent.asMap().entries.map((entry) {
+                  return (
+                    key: _movementDropdownKey(entry.value, entry.key),
+                    movement: entry.value,
+                  );
+                }).toList();
+                final selectedRecentMovement = recent.isEmpty
+                    ? null
+                    : recentOptions.firstWhere(
+                        (option) => option.key == _selectedRecentMovementId,
+                        orElse: () => recentOptions.first,
+                      );
+                final selectedRecentMovementOptionKey =
+                    selectedRecentMovement?.key;
                 final salesSeries = _buildSalesSeries(
                   inventory,
                   days: _selectedSalesWindowDays,
@@ -404,26 +428,60 @@ class _DashboardScreenState extends State<DashboardScreen> {
                                 padding: EdgeInsets.all(20),
                                 child: Text('Aucun mouvement pour le moment.'),
                               )
-                            : ListView.separated(
-                                shrinkWrap: true,
-                                physics: const NeverScrollableScrollPhysics(),
-                                itemCount: recent.length,
-                                separatorBuilder: (context, index) =>
-                                    const Divider(height: 1),
-                                itemBuilder: (context, index) {
-                                  final movement = recent[index];
-                                  final productName = inventory.productNameFor(
-                                    movement.productId,
-                                  );
-
-                                  return _ActivityTile(
-                                    productName: productName,
-                                    notes: movement.notes,
-                                    movementType: movement.movementType,
-                                    quantity: movement.quantity,
-                                    createdAt: movement.createdAt,
-                                  );
-                                },
+                            : Padding(
+                                padding: const EdgeInsets.all(16),
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    DropdownButtonFormField<String>(
+                                      value: selectedRecentMovementOptionKey,
+                                      decoration: const InputDecoration(
+                                        labelText: 'Choisir une activite',
+                                        prefixIcon: Icon(Icons.history),
+                                      ),
+                                      items: recentOptions.map((option) {
+                                        final movement = option.movement;
+                                        final productName = inventory
+                                            .productNameFor(movement.productId);
+                                        return DropdownMenuItem<String>(
+                                          value: option.key,
+                                          child: Text(
+                                            '$productName • ${movement.quantity}',
+                                            maxLines: 1,
+                                            overflow: TextOverflow.ellipsis,
+                                          ),
+                                        );
+                                      }).toList(),
+                                      onChanged: (value) {
+                                        setState(
+                                          () =>
+                                              _selectedRecentMovementId = value,
+                                        );
+                                      },
+                                    ),
+                                    const SizedBox(height: 12),
+                                    if (selectedRecentMovement != null)
+                                      _ActivityTile(
+                                        productName: inventory.productNameFor(
+                                          selectedRecentMovement
+                                              .movement
+                                              .productId,
+                                        ),
+                                        notes: selectedRecentMovement
+                                            .movement
+                                            .notes,
+                                        movementType: selectedRecentMovement
+                                            .movement
+                                            .movementType,
+                                        quantity: selectedRecentMovement
+                                            .movement
+                                            .quantity,
+                                        createdAt: selectedRecentMovement
+                                            .movement
+                                            .createdAt,
+                                      ),
+                                  ],
+                                ),
                               ),
                       ),
                     ],
@@ -1214,3 +1272,4 @@ class _ActivityTile extends StatelessWidget {
     return '$d/$m/$y $h:$min';
   }
 }
+

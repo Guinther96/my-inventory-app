@@ -1,5 +1,7 @@
 import 'package:supabase_flutter/supabase_flutter.dart';
 
+import '../../data/models/company_model.dart';
+
 class CompanyService {
   SupabaseClient get _client => Supabase.instance.client;
 
@@ -60,14 +62,14 @@ class CompanyService {
     return value.split('@').first;
   }
 
-  Future<String?> fetchSubscriptionStatus(String companyId) async {
+  Future<CompanyStatus> fetchCompanyStatus(String companyId) async {
     final row = await _client
         .from('companies')
-        .select('subscription_status')
+        .select('status')
         .eq('id', companyId)
         .maybeSingle();
 
-    return row?['subscription_status']?.toString();
+    return Company.normalizeStatus(row?['status']?.toString());
   }
 
   Future<String?> fetchCompanyName(String companyId) async {
@@ -78,5 +80,15 @@ class CompanyService {
         .maybeSingle();
 
     return row?['name']?.toString();
+  }
+
+  Future<String?> fetchCompanyEmail(String companyId) async {
+    final row = await _client
+        .from('companies')
+        .select('email')
+        .eq('id', companyId)
+        .maybeSingle();
+
+    return row?['email']?.toString();
   }
 }

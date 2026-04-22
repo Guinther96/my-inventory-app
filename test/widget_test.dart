@@ -1,30 +1,73 @@
-// This is a basic Flutter widget test.
-//
-// To perform an interaction with a widget in your test, use the WidgetTester
-// utility in the flutter_test package. For example, you can send tap and scroll
-// gestures. You can also use WidgetTester to find child widgets in the widget
-// tree, read text, and verify that the values of widget properties are correct.
-
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:go_router/go_router.dart';
+import 'package:my_inventory_app/data/models/company_model.dart';
+import 'package:my_inventory_app/data/providers/feature_access_provider.dart';
+import 'package:my_inventory_app/data/providers/user_profile_provider.dart';
+import 'package:my_inventory_app/presentation/common_widgets/app_drawer.dart';
+import 'package:my_inventory_app/services/features/feature_access_service.dart';
 
-import 'package:my_inventory_app/main.dart';
+import 'package:provider/provider.dart';
 
 void main() {
-  testWidgets('Counter increments smoke test', (WidgetTester tester) async {
-    // Build our app and trigger a frame.
-    await tester.pumpWidget(const InventoryApp());
+  testWidgets('disparition UI immediate quand feature desactivee', (
+    WidgetTester tester,
+  ) async {
+    final featureProvider = FeatureAccessProvider();
+    final userProvider = UserProfileProvider();
 
-    // Verify that our counter starts at 0.
-    expect(find.text('0'), findsOneWidget);
-    expect(find.text('1'), findsNothing);
+    featureProvider.debugSetSnapshot(
+      FeatureAccessSnapshot(
+        company: const Company(id: 'c1', status: CompanyStatus.active),
+        features: const <String, bool>{
+          'dashboard': true,
+          'sales': true,
+          'services': true,
+          'settings': true,
+        },
+      ),
+    );
 
-    // Tap the '+' icon and trigger a frame.
-    await tester.tap(find.byIcon(Icons.add));
+    final router = GoRouter(
+      initialLocation: '/sales',
+      routes: [
+        GoRoute(
+          path: '/sales',
+          builder: (_, __) => const Scaffold(body: AppDrawer()),
+        ),
+      ],
+    );
+
+    await tester.pumpWidget(
+      MultiProvider(
+        providers: [
+          ChangeNotifierProvider<UserProfileProvider>.value(
+            value: userProvider,
+          ),
+          ChangeNotifierProvider<FeatureAccessProvider>.value(
+            value: featureProvider,
+          ),
+        ],
+        child: MaterialApp.router(routerConfig: router),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    expect(find.text('Services'), findsOneWidget);
+
+    featureProvider.debugSetSnapshot(
+      FeatureAccessSnapshot(
+        company: const Company(id: 'c1', status: CompanyStatus.active),
+        features: const <String, bool>{
+          'dashboard': true,
+          'sales': true,
+          'services': false,
+          'settings': true,
+        },
+      ),
+    );
+
     await tester.pump();
-
-    // Verify that our counter has incremented.
-    expect(find.text('0'), findsNothing);
-    expect(find.text('1'), findsOneWidget);
+    expect(find.text('Services'), findsNothing);
   });
 }

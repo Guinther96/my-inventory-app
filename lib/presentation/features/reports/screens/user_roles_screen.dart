@@ -6,8 +6,8 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 
 import '../../../../data/models/user_profile_model.dart';
 import '../../../../data/providers/user_profile_provider.dart';
-import '../../../../services/auth_service.dart';
-import '../../../../services/user_profile_service.dart';
+import '../../../../services/auth/auth_service.dart';
+import '../../../../services/user/user_profile_service.dart';
 import '../../../common_widgets/app_drawer.dart';
 import '../../../common_widgets/app_sidebar.dart';
 
@@ -299,16 +299,20 @@ class _UserRolesScreenState extends State<UserRolesScreen> {
     }
   }
 
-  Future<void> _removeSellerUser(UserProfile user) async {
+  Future<void> _removeManagedUser(UserProfile user) async {
     if (_isDeleting) {
       return;
     }
+
+    final roleLabel = user.role == AppRole.provider
+        ? 'prestataire'
+        : 'caissier';
 
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (dialogContext) {
         return AlertDialog(
-          title: const Text('Supprimer le compte seller'),
+          title: Text('Supprimer le compte $roleLabel'),
           content: Text('Supprimer ${user.email} de votre compagnie ?'),
           actions: [
             TextButton(
@@ -331,7 +335,7 @@ class _UserRolesScreenState extends State<UserRolesScreen> {
     setState(() => _isDeleting = true);
 
     try {
-      await _service.removeSellerFromCompany(userId: user.id);
+      await _service.removeUserFromCompany(userId: user.id);
 
       if (!mounted) {
         return;
@@ -344,7 +348,7 @@ class _UserRolesScreenState extends State<UserRolesScreen> {
       }
 
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Compte seller ${user.email} supprime.')),
+        SnackBar(content: Text('Compte $roleLabel ${user.email} supprime.')),
       );
     } catch (e) {
       if (!mounted) {
@@ -404,7 +408,7 @@ class _UserRolesScreenState extends State<UserRolesScreen> {
                           ),
                           const SizedBox(height: 8),
                           Text(
-                            'Attribuez les roles manager ou seller aux utilisateurs de votre entreprise. Le compte employe doit exister avant son ajout.',
+                            'Attribuez les roles manager, caissier ou provider aux utilisateurs de votre entreprise. Le compte employe/prestataire doit exister avant son ajout.',
                             style: Theme.of(context).textTheme.bodyMedium,
                           ),
                           const SizedBox(height: 14),
@@ -461,17 +465,18 @@ class _UserRolesScreenState extends State<UserRolesScreen> {
       delegate: SliverChildBuilderDelegate((context, index) {
         final user = _users[index];
         final currentUserId = Supabase.instance.client.auth.currentUser?.id;
-        final canDeleteSeller =
-            user.role == AppRole.seller && user.id != currentUserId;
+        final canDeleteManagedUser =
+            (user.role == AppRole.seller || user.role == AppRole.provider) &&
+            user.id != currentUserId;
         return Padding(
           padding: const EdgeInsets.only(bottom: 10),
           child: _UserRoleTile(
             user: user,
             isUpdating: _isUpdating,
             onRoleChanged: (value) => _changeRole(user, value),
-            canDeleteSeller: canDeleteSeller,
-            onDeleteSeller: canDeleteSeller
-                ? () => _removeSellerUser(user)
+            canDeleteSeller: canDeleteManagedUser,
+            onDeleteSeller: canDeleteManagedUser
+                ? () => _removeManagedUser(user)
                 : null,
           ),
         );
@@ -570,7 +575,7 @@ class _UserRolesScreenState extends State<UserRolesScreen> {
           ),
           const SizedBox(height: 8),
           const Text(
-            'Etape 1: le seller cree son compte depuis Connexion > Creer un nouveau compte > Compte employe. Etape 2: le manager saisit ici le meme email pour rattacher ce compte a la compagnie.',
+            'Etape 1: l utilisateur cree son compte depuis Connexion > Creer un nouveau compte (employe ou prestataire). Etape 2: le manager saisit ici le meme email pour rattacher ce compte a la compagnie.',
           ),
           const SizedBox(height: 10),
           Row(
@@ -602,7 +607,11 @@ class _UserRolesScreenState extends State<UserRolesScreen> {
                     ),
                     DropdownMenuItem(
                       value: AppRole.seller,
-                      child: Text('seller'),
+                      child: Text('caissier'),
+                    ),
+                    DropdownMenuItem(
+                      value: AppRole.provider,
+                      child: Text('provider'),
                     ),
                   ],
                   onChanged: _isAdding
@@ -699,7 +708,14 @@ class _UserRoleTile extends StatelessWidget {
                   value: AppRole.manager,
                   child: Text('manager'),
                 ),
-                DropdownMenuItem(value: AppRole.seller, child: Text('seller')),
+                DropdownMenuItem(
+                  value: AppRole.seller,
+                  child: Text('caissier'),
+                ),
+                DropdownMenuItem(
+                  value: AppRole.provider,
+                  child: Text('provider'),
+                ),
               ],
               onChanged: isUpdating
                   ? null
@@ -713,8 +729,8 @@ class _UserRoleTile extends StatelessWidget {
           const SizedBox(width: 8),
           IconButton(
             tooltip: canDeleteSeller
-                ? 'Supprimer ce compte seller'
-                : 'Suppression reservee aux sellers',
+                ? 'Supprimer ce compte caissier/prestataire'
+                : 'Suppression reservee aux caissiers/prestataires',
             onPressed: canDeleteSeller && !isUpdating ? onDeleteSeller : null,
             icon: const Icon(Icons.delete_outline),
           ),

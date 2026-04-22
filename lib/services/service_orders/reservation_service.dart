@@ -1,6 +1,6 @@
 import 'package:supabase_flutter/supabase_flutter.dart';
 
-import '../data/models/reservation_model.dart';
+import '../../data/models/reservation_model.dart';
 
 class ReservationService {
   SupabaseClient get _client => Supabase.instance.client;
@@ -104,5 +104,15 @@ class ReservationService {
         .single();
 
     return Reservation.fromJson(Map<String, dynamic>.from(row));
+  }
+
+  Future<void> deleteReservation({required String reservationId}) async {
+    final companyId = await _resolveCompanyId();
+
+    await _client
+        .from('reservations')
+        .delete()
+        .eq('id', reservationId)
+        .eq('company_id', companyId);
   }
 }
