@@ -231,6 +231,42 @@ class _ReservationScreenState extends State<ReservationScreen> {
     }
   }
 
+  Future<void> _deleteProviderReservation(ProviderReservation reservation) async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (dialogContext) {
+        return AlertDialog(
+          title: const Text('Supprimer la reservation prestataire'),
+          content: Text(
+            'Voulez-vous vraiment supprimer la reservation de ${reservation.clientName} ?',
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(dialogContext).pop(false),
+              child: const Text('Annuler'),
+            ),
+            FilledButton(
+              onPressed: () => Navigator.of(dialogContext).pop(true),
+              child: const Text('Supprimer'),
+            ),
+          ],
+        );
+      },
+    );
+
+    if (confirmed != true) {
+      return;
+    }
+
+    try {
+      await _providerReservationService.deleteReservation(reservation.id);
+      await _load();
+      _show('Reservation prestataire supprimee.');
+    } catch (e) {
+      _show('Erreur suppression prestataire: $e');
+    }
+  }
+
   void _show(String message) {
     if (!mounted) {
       return;
@@ -483,6 +519,19 @@ class _ReservationScreenState extends State<ReservationScreen> {
                                     const SizedBox(height: 6),
                                     Text(
                                       '${DateFormat('dd/MM/yyyy HH:mm').format(DateTime(reservation.date.year, reservation.date.month, reservation.date.day, int.parse(reservation.time.split(':')[0]), int.parse(reservation.time.split(':')[1])))} | HTG ${reservation.price.toStringAsFixed(2)} | ${reservation.status}',
+                                    ),
+                                    const SizedBox(height: 10),
+                                    Wrap(
+                                      spacing: 8,
+                                      runSpacing: 8,
+                                      children: [
+                                        OutlinedButton.icon(
+                                          onPressed: () =>
+                                              _deleteProviderReservation(reservation),
+                                          icon: const Icon(Icons.delete_outline),
+                                          label: const Text('Supprimer'),
+                                        ),
+                                      ],
                                     ),
                                   ],
                                 ),

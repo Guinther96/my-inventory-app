@@ -100,12 +100,12 @@ class PrinterService {
       final lineTotal = qty * price;
 
       lines.add(_truncate(name));
-      lines.add('$qty x ${_money(price)} = ${_money(lineTotal)}');
+      lines.add('$qty x ${formatCurrency(price)} = ${formatCurrency(lineTotal)}');
     }
 
     lines.addAll(<String>[
       _separator(),
-      'Total: ${_money(total)}',
+      'Total: ${formatCurrency(total)}',
       _separator(),
     ]);
 
@@ -219,6 +219,8 @@ class PrinterService {
     }
     return double.tryParse(value?.toString() ?? '') ?? 0;
   }
+
+  static String formatCurrency(double value) => 'HTG ${value.toStringAsFixed(2)}';
 
   static String _money(double value) => value.toStringAsFixed(2);
 }
