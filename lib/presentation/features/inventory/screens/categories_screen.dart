@@ -414,8 +414,7 @@ class CategoriesScreen extends StatelessWidget {
                                   await inventory.addOrUpdateCategory(
                                     Category(
                                       id:
-                                          category?.id ??
-                                          'cat-${now.microsecondsSinceEpoch}',
+                                          category?.id ?? '',
                                       name: name,
                                       description:
                                           descController.text.trim().isEmpty

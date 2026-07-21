@@ -93,12 +93,21 @@ class InventorySupabaseService {
       'parent_id': category.parentId,
       'company_id': companyId,
     };
+///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+   try {
+  final row = await _client
+      .from('categories')
+      .upsert(payload)
+      .select()
+      .single();
 
-    final row = await _client
-        .from('categories')
-        .upsert(payload)
-        .select()
-        .single();
+  return Category.fromJson(Map<String, dynamic>.from(row));
+} on PostgrestException catch (e) {
+  print('Erreur categorie: ${e.message}');
+  print('Code: ${e.code}');
+  print('Details: ${e.details}');
+  rethrow;
+}//////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
     return Category.fromJson(Map<String, dynamic>.from(row));
   }
