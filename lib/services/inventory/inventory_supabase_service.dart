@@ -80,38 +80,36 @@ class InventorySupabaseService {
 
   // Cree ou met a jour une categorie.
   // isNew determine si on envoie explicitement l'id ou non.
-  Future<Category> upsertCategory({
-    required String companyId,
-    required Category category,
-    required bool isNew,
-  }) async {
-    // Payload minimal autorise par le schema categories.
-    final payload = <String, dynamic>{
-      if (!isNew) 'id': category.id,
-      'name': category.name,
-      'description': category.description,
-      'parent_id': category.parentId,
-      'company_id': companyId,
-    };
-///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
-   try {
-  final row = await _client
-      .from('categories')
-      .upsert(payload)
-      .select()
-      .single();
+  /////////////////////////////////////////////////////////////////////////////
+ Future<Category> upsertCategory({
+  required String companyId,
+  required Category category,
+  required bool isNew,
+}) async {
+  final payload = <String, dynamic>{
+    if (!isNew) 'id': category.id,
+    'name': category.name,
+    'description': category.description,
+    'parent_id': category.parentId,
+    'company_id': companyId,
+  };
 
-  return Category.fromJson(Map<String, dynamic>.from(row));
-} on PostgrestException catch (e) {
-  print('Erreur categorie: ${e.message}');
-  print('Code: ${e.code}');
-  print('Details: ${e.details}');
-  rethrow;
-}//////////////////////////////////////////////////////////////////////////////////////////////////////////////
+  try {
+    final row = await _client
+        .from('categories')
+        .upsert(payload)
+        .select()
+        .single();
 
     return Category.fromJson(Map<String, dynamic>.from(row));
+  } on PostgrestException catch (e) {
+    print('Erreur categorie: ${e.message}');
+    print('Code: ${e.code}');
+    print('Details: ${e.details}');
+    rethrow;
   }
-
+}
+//////////////////////////////////////////////////////////////////////////////////////////////
   // Supprime une categorie en verifiant l'appartenance a la company.
   Future<void> deleteCategory({
     required String companyId,
