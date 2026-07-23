@@ -2,11 +2,13 @@ import 'package:flutter/foundation.dart';
 import 'package:intl/intl.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
+import '../../core/utils/currency.dart';
 import '../../data/models/client_model.dart';
 import '../../data/models/reservation_model.dart';
 import '../../data/models/service_model.dart';
 import '../../data/models/service_order_item_model.dart';
 import '../../data/models/service_order_model.dart';
+import '../company/company_service.dart';
 import 'reservation_service.dart';
 import 'service_order_printer_service.dart';
 
@@ -31,6 +33,7 @@ class ServiceOrderService {
   final ReservationService _reservationService = ReservationService();
   final ServiceOrderPrinterService _printerService =
       ServiceOrderPrinterService();
+  final CompanyService _companyService = CompanyService();
 
   Future<String> _resolveCompanyId() async {
     final userId = _client.auth.currentUser?.id;
@@ -95,6 +98,7 @@ class ServiceOrderService {
       'name': service.name,
       'description': service.description,
       'price': service.price,
+      'currency': service.currency,
       'is_active': service.isActive,
     };
 
@@ -199,6 +203,7 @@ class ServiceOrderService {
     required String clientName,
     required List<ServiceOrderItem> items,
     String? paymentMethod,
+    String? paymentCurrency,
     String? notes,
     String? reservationId,
   }) async {
@@ -209,7 +214,48 @@ class ServiceOrderService {
     final companyId = await _resolveCompanyId();
     final cashierId = _client.auth.currentUser?.id;
     final cashierName = await _currentCashierDisplayName();
-    final subtotal = items.fold<double>(0, (sum, item) => sum + item.lineTotal);
+
+    // Devise choisie pour le ticket. Par defaut, la devise du premier
+    // service (comportement mono-devise retro-compatible).
+    final resolvedPaymentCurrency = normalizeCurrencyCode(
+      paymentCurrency ?? items.first.currency,
+    );
+
+    final needsConversion = items.any(
+      (item) =>
+          normalizeCurrencyCode(item.currency) != resolvedPaymentCurrency,
+    );
+
+    double? usdToHtgRate;
+    if (needsConversion) {
+      usdToHtgRate = await _companyService.fetchExchangeRate(companyId);
+      if (usdToHtgRate == null) {
+        throw Exception(
+          'Taux de change non configure. Configurez-le dans Parametres.',
+        );
+      }
+    }
+
+    double subtotal = 0;
+    double? exchangeRateUsed;
+    for (final item in items) {
+      final converted = convertAmount(
+        amount: item.lineTotal,
+        fromCurrency: item.currency,
+        toCurrency: resolvedPaymentCurrency,
+        usdToHtgRate: usdToHtgRate,
+      );
+      if (converted == null) {
+        throw Exception(
+          'Conversion de devise impossible pour ${item.serviceName}.',
+        );
+      }
+      subtotal += converted;
+      if (normalizeCurrencyCode(item.currency) != resolvedPaymentCurrency) {
+        exchangeRateUsed = usdToHtgRate;
+      }
+    }
+
     const discount = 0.0;
     final total = subtotal - discount;
 
@@ -232,6 +278,8 @@ class ServiceOrderService {
           'discount_amount': discount,
           'total_amount': total,
           'paid_amount': total,
+          'payment_currency': resolvedPaymentCurrency,
+          if (exchangeRateUsed != null) 'exchange_rate': exchangeRateUsed,
           'notes': notes,
         })
         .select()
@@ -248,6 +296,7 @@ class ServiceOrderService {
             'service_id': item.serviceId,
             'service_name': item.serviceName,
             'unit_price': item.unitPrice,
+            'currency': item.currency,
             'quantity': item.quantity,
             'line_total': item.lineTotal,
             if (item.providerId != null) 'provider_id': item.providerId,
@@ -282,6 +331,7 @@ class ServiceOrderService {
     required String clientName,
     required List<ServiceOrderItem> items,
     String? paymentMethod,
+    String? paymentCurrency,
     String? notes,
     String? reservationId,
     required String companyName,
@@ -293,6 +343,7 @@ class ServiceOrderService {
       clientName: clientName,
       items: items,
       paymentMethod: paymentMethod,
+      paymentCurrency: paymentCurrency,
       notes: notes,
       reservationId: reservationId,
     );
@@ -323,6 +374,7 @@ class ServiceOrderService {
       serviceId: service.id,
       serviceName: service.name,
       unitPrice: service.price,
+      currency: service.currency,
       quantity: 1,
       lineTotal: service.price,
       createdAt: DateTime.now(),
@@ -333,6 +385,7 @@ class ServiceOrderService {
       clientName: reservation.clientName,
       items: <ServiceOrderItem>[line],
       paymentMethod: 'counter',
+      paymentCurrency: service.currency,
       notes: notes,
       reservationId: reservation.id,
     );
@@ -359,7 +412,7 @@ class ServiceOrderService {
 
     final selectClause = includeItems
         ? '*, service_order_items(*)'
-        : 'id, company_id, client_id, client_name, cashier_id, cashier_name, reservation_id, ticket_number, payment_method, payment_status, subtotal_amount, discount_amount, total_amount, paid_amount, notes, created_at, updated_at';
+        : 'id, company_id, client_id, client_name, cashier_id, cashier_name, reservation_id, ticket_number, payment_method, payment_status, subtotal_amount, discount_amount, total_amount, paid_amount, payment_currency, exchange_rate, notes, created_at, updated_at';
 
     final rows = await _client
         .from('service_orders')

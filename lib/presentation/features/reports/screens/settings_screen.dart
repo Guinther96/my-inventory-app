@@ -5,6 +5,7 @@ import 'package:provider/provider.dart';
 import '../../../../data/providers/inventory_provider.dart';
 import '../../../../data/providers/user_profile_provider.dart';
 import '../../../../services/auth/auth_service.dart';
+import '../../../../services/company/company_service.dart';
 import '../../../../services/printer/printer_models.dart';
 import '../../../../services/printer/printer_service.dart';
 import '../../../common_widgets/app_drawer.dart';
@@ -117,6 +118,20 @@ class SettingsScreen extends StatelessWidget {
                           onPressed: () => _openUsers(context),
                           icon: const Icon(Icons.groups_2),
                           label: const Text('Gerer les utilisateurs'),
+                        ),
+                      ),
+                    if (isManager) const SizedBox(height: 14),
+                    if (isManager)
+                      _SettingsBlock(
+                        title: 'Devises',
+                        description:
+                            'Configurez le taux de change utilise pour convertir un paiement dans une devise differente de celle du produit ou du service.',
+                        icon: Icons.currency_exchange,
+                        iconColor: const Color(0xFFB45309),
+                        child: _CurrencySettingsPanel(
+                          companyId: context
+                              .read<InventoryProvider>()
+                              .companyId,
                         ),
                       ),
                     if (isManager) const SizedBox(height: 14),
@@ -380,6 +395,138 @@ class _PrinterSettingsPanelState extends State<_PrinterSettingsPanel> {
               label: const Text('Deconnecter'),
             ),
           ],
+        ),
+      ],
+    );
+  }
+}
+
+class _CurrencySettingsPanel extends StatefulWidget {
+  final String? companyId;
+
+  const _CurrencySettingsPanel({required this.companyId});
+
+  @override
+  State<_CurrencySettingsPanel> createState() =>
+      _CurrencySettingsPanelState();
+}
+
+class _CurrencySettingsPanelState extends State<_CurrencySettingsPanel> {
+  final CompanyService _companyService = CompanyService();
+  final TextEditingController _rateController = TextEditingController();
+  bool _isLoading = true;
+  bool _isSaving = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _loadRate();
+  }
+
+  @override
+  void dispose() {
+    _rateController.dispose();
+    super.dispose();
+  }
+
+  Future<void> _loadRate() async {
+    final companyId = widget.companyId;
+    if (companyId == null || companyId.isEmpty) {
+      setState(() => _isLoading = false);
+      return;
+    }
+
+    try {
+      final rate = await _companyService.fetchExchangeRate(companyId);
+      if (rate != null) {
+        _rateController.text = rate.toStringAsFixed(4);
+      }
+    } catch (e, st) {
+      debugPrint('Load exchange rate failed: $e');
+      debugPrint('$st');
+    } finally {
+      if (mounted) {
+        setState(() => _isLoading = false);
+      }
+    }
+  }
+
+  Future<void> _saveRate() async {
+    final companyId = widget.companyId;
+    if (companyId == null || companyId.isEmpty) {
+      _show('Entreprise introuvable.');
+      return;
+    }
+
+    final rate = double.tryParse(_rateController.text.trim().replaceAll(',', '.'));
+    if (rate == null || rate <= 0) {
+      _show('Entrez un taux valide (superieur a 0).');
+      return;
+    }
+
+    setState(() => _isSaving = true);
+    try {
+      await _companyService.updateExchangeRate(companyId, rate);
+      _show('Taux de change enregistre.');
+    } catch (e, st) {
+      debugPrint('Save exchange rate failed: $e');
+      debugPrint('$st');
+      _show('Erreur lors de l enregistrement du taux.');
+    } finally {
+      if (mounted) {
+        setState(() => _isSaving = false);
+      }
+    }
+  }
+
+  void _show(String message) {
+    if (!mounted) {
+      return;
+    }
+    ScaffoldMessenger.of(
+      context,
+    ).showSnackBar(SnackBar(content: Text(message)));
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    if (_isLoading) {
+      return const Padding(
+        padding: EdgeInsets.symmetric(vertical: 6),
+        child: LinearProgressIndicator(minHeight: 2),
+      );
+    }
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Row(
+          crossAxisAlignment: CrossAxisAlignment.center,
+          children: [
+            const Text('1 USD ='),
+            const SizedBox(width: 10),
+            Expanded(
+              child: TextField(
+                controller: _rateController,
+                keyboardType: const TextInputType.numberWithOptions(
+                  decimal: true,
+                ),
+                decoration: const InputDecoration(
+                  border: OutlineInputBorder(),
+                  isDense: true,
+                  hintText: 'Ex: 132.00',
+                ),
+              ),
+            ),
+            const SizedBox(width: 10),
+            const Text('HTG'),
+          ],
+        ),
+        const SizedBox(height: 10),
+        FilledButton.icon(
+          onPressed: _isSaving ? null : _saveRate,
+          icon: const Icon(Icons.save_outlined),
+          label: Text(_isSaving ? 'Enregistrement...' : 'Enregistrer'),
         ),
       ],
     );

@@ -135,6 +135,7 @@ class InventorySupabaseService {
       'description': product.description,
       'barcode': product.barcode,
       'price': product.price,
+      'currency': product.currency,
       'quantity': product.quantityInStock,
       'min_stock': product.minStockAlert,
       'category_id': product.categoryId,
@@ -177,6 +178,7 @@ class InventorySupabaseService {
     required String movementType,
     required int quantity,
     String? notes,
+    String? paymentCurrency,
   }) async {
     // Validation metier locale, en plus de la contrainte SQL (> 0).
     if (quantity <= 0) {
@@ -194,6 +196,7 @@ class InventorySupabaseService {
             'p_product_id': productId,
             'p_quantity': quantity,
             'p_notes': notes,
+            'p_payment_currency': paymentCurrency,
           },
         );
 

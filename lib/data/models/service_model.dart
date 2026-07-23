@@ -1,9 +1,12 @@
+import '../../core/utils/currency.dart';
+
 class Service {
   final String id;
   final String companyId;
   final String name;
   final String? description;
   final double price;
+  final String currency;
   final int? durationMinutes;
   final String? createdBy;
   final bool isActive;
@@ -16,6 +19,7 @@ class Service {
     required this.name,
     this.description,
     required this.price,
+    this.currency = 'HTG',
     this.durationMinutes,
     this.createdBy,
     required this.isActive,
@@ -37,6 +41,7 @@ class Service {
             (json['price'] ?? json['base_price'])?.toString() ?? '',
           ) ??
           0,
+      currency: normalizeCurrencyCode(json['currency']?.toString()),
       durationMinutes: int.tryParse(json['duration_minutes']?.toString() ?? ''),
       createdBy: json['created_by']?.toString(),
       isActive: json['is_active'] == null ? true : json['is_active'] == true,
@@ -53,6 +58,7 @@ class Service {
     String? name,
     String? description,
     double? price,
+    String? currency,
     int? durationMinutes,
     String? createdBy,
     bool? isActive,
@@ -65,6 +71,7 @@ class Service {
       name: name ?? this.name,
       description: description ?? this.description,
       price: price ?? this.price,
+      currency: currency ?? this.currency,
       durationMinutes: durationMinutes ?? this.durationMinutes,
       createdBy: createdBy ?? this.createdBy,
       isActive: isActive ?? this.isActive,
@@ -80,6 +87,7 @@ class Service {
       'name': name,
       'description': description,
       'price': price,
+      'currency': currency,
       'duration_minutes': durationMinutes,
       'created_by': createdBy,
       'is_active': isActive,

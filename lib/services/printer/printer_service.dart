@@ -77,6 +77,7 @@ class PrinterService {
     String? companyEmail,
     required List<Map<String, dynamic>> items,
     required double total,
+    String paymentCurrency = 'HTG',
   }) async {
     final now = DateTime.now();
     final transactionId = 'SALE-${now.millisecondsSinceEpoch}';
@@ -97,15 +98,18 @@ class PrinterService {
           .trim();
       final qty = _toInt(item['quantity'] ?? item['qty']);
       final price = _toDouble(item['price'] ?? item['unitPrice']);
+      final currency = (item['currency'] ?? paymentCurrency).toString();
       final lineTotal = qty * price;
 
       lines.add(_truncate(name));
-      lines.add('$qty x ${formatCurrency(price)} = ${formatCurrency(lineTotal)}');
+      lines.add(
+        '$qty x ${formatCurrency(price, currency)} = ${formatCurrency(lineTotal, currency)}',
+      );
     }
 
     lines.addAll(<String>[
       _separator(),
-      'Total: ${formatCurrency(total)}',
+      'Total ($paymentCurrency): ${formatCurrency(total, paymentCurrency)}',
       _separator(),
     ]);
 
@@ -123,6 +127,7 @@ class PrinterService {
     required double price,
     required String clientName,
     String? cashierName,
+    String currency = 'HTG',
   }) async {
     final now = DateTime.now();
     final transactionId = 'SRV-${now.millisecondsSinceEpoch}';
@@ -139,7 +144,7 @@ class PrinterService {
       if (cashierName != null && cashierName.isNotEmpty)
         'Vendeur: ${_truncate(cashierName)}',
       'Service: ${_truncate(serviceName)}',
-      'Prix: ${_money(price)}',
+      'Prix: ${formatCurrency(price, currency)}',
       _separator(),
     ];
 
@@ -220,7 +225,6 @@ class PrinterService {
     return double.tryParse(value?.toString() ?? '') ?? 0;
   }
 
-  static String formatCurrency(double value) => 'HTG ${value.toStringAsFixed(2)}';
-
-  static String _money(double value) => value.toStringAsFixed(2);
+  static String formatCurrency(double value, [String currency = 'HTG']) =>
+      '${value.toStringAsFixed(2)} $currency';
 }

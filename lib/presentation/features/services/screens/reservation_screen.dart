@@ -4,6 +4,7 @@ import 'package:intl/intl.dart';
 
 import '../../../common_widgets/app_drawer.dart';
 import '../../../common_widgets/app_sidebar.dart';
+import '../../../../../core/utils/currency.dart';
 import '../../../../../data/models/client_model.dart';
 import '../../../../../data/models/reservation_model.dart';
 import '../../../../../data/models/service_model.dart';
@@ -32,6 +33,17 @@ class _ReservationScreenState extends State<ReservationScreen> {
   String? _error;
 
   List<Service> _services = const <Service>[];
+
+  /// ProviderReservation ne stocke que le nom du service (pas son id) :
+  /// on retrouve sa devise via le catalogue de services par nom.
+  String _currencyForServiceName(String name) {
+    for (final service in _services) {
+      if (service.name == name) {
+        return service.currency;
+      }
+    }
+    return 'HTG';
+  }
   List<Client> _clients = const <Client>[];
   List<Reservation> _reservations = const <Reservation>[];
   List<ProviderReservation> _providerReservations =
@@ -415,7 +427,7 @@ class _ReservationScreenState extends State<ReservationScreen> {
                                         (service) => DropdownMenuItem<String>(
                                           value: service.id,
                                           child: Text(
-                                            '${service.name} (${service.price.toStringAsFixed(2)} Gdes)',
+                                            '${service.name} (${formatMoney(service.price, service.currency)})',
                                             maxLines: 1,
                                             overflow: TextOverflow.ellipsis,
                                           ),
@@ -518,7 +530,7 @@ class _ReservationScreenState extends State<ReservationScreen> {
                                     ),
                                     const SizedBox(height: 6),
                                     Text(
-                                      '${DateFormat('dd/MM/yyyy HH:mm').format(DateTime(reservation.date.year, reservation.date.month, reservation.date.day, int.parse(reservation.time.split(':')[0]), int.parse(reservation.time.split(':')[1])))} | HTG ${reservation.price.toStringAsFixed(2)} | ${reservation.status}',
+                                      '${DateFormat('dd/MM/yyyy HH:mm').format(DateTime(reservation.date.year, reservation.date.month, reservation.date.day, int.parse(reservation.time.split(':')[0]), int.parse(reservation.time.split(':')[1])))} | ${formatMoney(reservation.price, _currencyForServiceName(reservation.serviceName))} | ${reservation.status}',
                                     ),
                                     const SizedBox(height: 10),
                                     Wrap(

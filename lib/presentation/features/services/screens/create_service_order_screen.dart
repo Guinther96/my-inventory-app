@@ -5,6 +5,7 @@ import 'package:provider/provider.dart';
 
 import '../../../common_widgets/app_drawer.dart';
 import '../../../common_widgets/app_sidebar.dart';
+import '../../../../../core/utils/currency.dart';
 import '../../../../../data/models/client_model.dart';
 import '../../../../../data/models/reservation_model.dart';
 import '../../../../../data/models/service_model.dart';
@@ -12,6 +13,7 @@ import '../../../../../data/models/service_order_item_model.dart';
 import '../../../../../data/models/service_order_model.dart';
 import '../../../../../data/models/user_profile_model.dart';
 import '../../../../../data/providers/inventory_provider.dart';
+import '../../../../../services/company/company_service.dart';
 import '../../../../../services/service_orders/service_service.dart';
 import '../../../../../services/service_orders/service_order_service.dart';
 import '../../../../../services/user/user_profile_service.dart';
@@ -40,6 +42,10 @@ class _CreateServiceOrderScreenState extends State<CreateServiceOrderScreen> {
   List<UserProfile> _providers = const <UserProfile>[];
   List<_OrderLine> _lines = <_OrderLine>[];
 
+  /// Devise de paiement choisie par le client pour le ticket courant.
+  String? _selectedPaymentCurrency;
+  double? _exchangeRate;
+
   Client? _selectedClient;
   final TextEditingController _nameCtrl = TextEditingController();
   final TextEditingController _phoneCtrl = TextEditingController();
@@ -66,10 +72,13 @@ class _CreateServiceOrderScreenState extends State<CreateServiceOrderScreen> {
     });
 
     try {
+      final companyId = context.read<InventoryProvider>().companyId;
       final results = await Future.wait<dynamic>([
         _serviceCatalogService.fetchServices(),
         _service.fetchClients(),
         _userProfileService.fetchCompanyUsers(),
+        if (companyId != null && companyId.isNotEmpty)
+          CompanyService().fetchExchangeRate(companyId),
       ]);
 
       if (!mounted) {
@@ -78,6 +87,9 @@ class _CreateServiceOrderScreenState extends State<CreateServiceOrderScreen> {
 
       _services = results[0] as List<Service>;
       _clients = results[1] as List<Client>;
+      if (results.length > 3) {
+        _exchangeRate = results[3] as double?;
+      }
       
       // Filtrer seulement les prestataires
       final allUsers = results[2] as List<UserProfile>;
@@ -133,10 +145,53 @@ class _CreateServiceOrderScreenState extends State<CreateServiceOrderScreen> {
     });
   }
 
-  double get _total => _lines.fold<double>(
-    0,
-    (sum, line) => sum + (line.quantity * line.service.price),
-  );
+  /// Regroupe le montant du ticket par devise (les services ajoutes peuvent
+  /// etre en HTG et en USD dans le meme ticket).
+  Map<String, double> get _totalsByCurrency {
+    final totals = <String, double>{};
+    for (final line in _lines) {
+      final lineTotal = line.quantity * line.service.price;
+      totals.update(
+        line.service.currency,
+        (value) => value + lineTotal,
+        ifAbsent: () => lineTotal,
+      );
+    }
+    return totals;
+  }
+
+  /// Devise de paiement effective: choix explicite, sinon devise unique du
+  /// ticket, sinon HTG si le ticket est mixte/vide.
+  String get _paymentCurrency {
+    if (_selectedPaymentCurrency != null) {
+      return _selectedPaymentCurrency!;
+    }
+    final totals = _totalsByCurrency;
+    if (totals.length == 1) {
+      return totals.keys.first;
+    }
+    return 'HTG';
+  }
+
+  /// Total converti dans la devise de paiement choisie, ou null si une
+  /// conversion est necessaire mais qu'aucun taux n'est configure.
+  double? get _convertedTotal {
+    final paymentCurrency = _paymentCurrency;
+    var total = 0.0;
+    for (final entry in _totalsByCurrency.entries) {
+      final converted = convertAmount(
+        amount: entry.value,
+        fromCurrency: entry.key,
+        toCurrency: paymentCurrency,
+        usdToHtgRate: _exchangeRate,
+      );
+      if (converted == null) {
+        return null;
+      }
+      total += converted;
+    }
+    return total;
+  }
 
   Future<void> _submit() async {
     if (_lines.isEmpty) {
@@ -147,6 +202,11 @@ class _CreateServiceOrderScreenState extends State<CreateServiceOrderScreen> {
     final clientName = _nameCtrl.text.trim();
     if (clientName.isEmpty) {
       _show('Nom client obligatoire.');
+      return;
+    }
+
+    if (_convertedTotal == null) {
+      _show('Taux de change non configure. Configurez-le dans Parametres.');
       return;
     }
 
@@ -170,6 +230,7 @@ class _CreateServiceOrderScreenState extends State<CreateServiceOrderScreen> {
               serviceId: line.service.id,
               serviceName: line.service.name,
               unitPrice: line.service.price,
+              currency: line.service.currency,
               quantity: line.quantity,
               lineTotal: line.quantity * line.service.price,
               providerId: line.providerId,
@@ -187,6 +248,7 @@ class _CreateServiceOrderScreenState extends State<CreateServiceOrderScreen> {
         clientName: clientName,
         items: items,
         paymentMethod: 'counter',
+        paymentCurrency: _paymentCurrency,
         notes: _notesCtrl.text.trim().isEmpty ? null : _notesCtrl.text.trim(),
         reservationId: widget.initialReservation?.id,
         companyName: companyName,
@@ -202,6 +264,7 @@ class _CreateServiceOrderScreenState extends State<CreateServiceOrderScreen> {
       setState(() {
         _lines = <_OrderLine>[];
         _selectedClient = null;
+        _selectedPaymentCurrency = null;
       });
       _nameCtrl.clear();
       _phoneCtrl.clear();
@@ -245,11 +308,13 @@ class _CreateServiceOrderScreenState extends State<CreateServiceOrderScreen> {
                 const Text('Services:'),
                 ...order.items.map(
                   (item) => Text(
-                    '- ${item.serviceName}: ${item.unitPrice.toStringAsFixed(2)} Gdes x ${item.quantity} = ${item.lineTotal.toStringAsFixed(2)} Gdes',
+                    '- ${item.serviceName}: ${formatMoney(item.unitPrice, item.currency)} x ${item.quantity} = ${formatMoney(item.lineTotal, item.currency)}',
                   ),
                 ),
                 const SizedBox(height: 8),
-                Text('Total: ${order.totalAmount.toStringAsFixed(2)} Gdes'),
+                Text(
+                  'Total: ${formatMoney(order.totalAmount, order.paymentCurrency)}',
+                ),
               ],
             ),
           ),
@@ -407,7 +472,7 @@ class _CreateServiceOrderScreenState extends State<CreateServiceOrderScreen> {
                             .map(
                               (service) => ActionChip(
                                 label: Text(
-                                  '${service.name} (${service.price.toStringAsFixed(2)} Gdes)',
+                                  '${service.name} (${formatMoney(service.price, service.currency)})',
                                 ),
                                 onPressed: () => _addService(service),
                               ),
@@ -450,7 +515,7 @@ class _CreateServiceOrderScreenState extends State<CreateServiceOrderScreen> {
                                             ),
                                             const SizedBox(height: 8),
                                             Text(
-                                              '${line.quantity} x ${line.service.price.toStringAsFixed(2)} Gdes = ${(line.quantity * line.service.price).toStringAsFixed(2)} Gdes',
+                                              '${line.quantity} x ${formatMoney(line.service.price, line.service.currency)} = ${formatMoney(line.quantity * line.service.price, line.service.currency)}',
                                               style: Theme.of(context)
                                                   .textTheme
                                                   .bodySmall,
@@ -530,13 +595,45 @@ class _CreateServiceOrderScreenState extends State<CreateServiceOrderScreen> {
                                   },
                                 ),
                               const Divider(),
+                              if (_totalsByCurrency.length > 1) ...[
+                                const Text('Mode de paiement'),
+                                Row(
+                                  children: kSupportedCurrencies.map((code) {
+                                    return Expanded(
+                                      child: RadioListTile<String>(
+                                        contentPadding: EdgeInsets.zero,
+                                        dense: true,
+                                        value: code,
+                                        groupValue: _paymentCurrency,
+                                        title: Text(
+                                          AppCurrency.fromCode(code).label,
+                                          style: const TextStyle(fontSize: 13),
+                                        ),
+                                        onChanged: (value) {
+                                          if (value != null) {
+                                            setState(
+                                              () => _selectedPaymentCurrency =
+                                                  value,
+                                            );
+                                          }
+                                        },
+                                      ),
+                                    );
+                                  }).toList(),
+                                ),
+                              ],
                               Text(
-                                'Total: ${_total.toStringAsFixed(2)}',
+                                _convertedTotal == null
+                                    ? 'Total: taux de change requis (configurez-le dans Parametres)'
+                                    : 'Total: ${formatMoney(_convertedTotal!, _paymentCurrency)}',
                                 style: Theme.of(context).textTheme.titleMedium,
                               ),
                               const SizedBox(height: 8),
                               FilledButton.icon(
-                                onPressed: _isSubmitting ? null : _submit,
+                                onPressed:
+                                    _isSubmitting || _convertedTotal == null
+                                    ? null
+                                    : _submit,
                                 icon: const Icon(Icons.receipt_long),
                                 label: const Text(
                                   'Valider paiement + generer ticket',

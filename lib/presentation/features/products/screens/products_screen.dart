@@ -5,6 +5,7 @@ import 'package:flutter/services.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:provider/provider.dart';
 
+import '../../../../core/utils/currency.dart';
 import '../../../../data/models/product_model.dart';
 import '../../../../data/providers/inventory_provider.dart';
 import '../../../common_widgets/app_drawer.dart';
@@ -171,7 +172,7 @@ class _ProductsScreenState extends State<ProductsScreen> {
                                 ),
                                 title: Text(product.name),
                                 subtitle: Text(
-                                  '$categoryName • Stock: ${product.quantityInStock} • Prix: ${product.price.toStringAsFixed(2)} Gdes',
+                                  '$categoryName • Stock: ${product.quantityInStock} • Prix: ${formatMoney(product.price, product.currency)}',
                                 ),
                                 trailing: Row(
                                   mainAxisSize: MainAxisSize.min,
@@ -258,6 +259,7 @@ class _ProductsScreenState extends State<ProductsScreen> {
     );
 
     String? selectedCategoryId = product?.categoryId;
+    String selectedCurrency = normalizeCurrencyCode(product?.currency);
 
     await showDialog<void>(
       context: context,
@@ -358,12 +360,31 @@ class _ProductsScreenState extends State<ProductsScreen> {
                         ),
                         TextField(
                           controller: priceController,
-                          decoration: const InputDecoration(
-                            labelText: 'Prix (Gdes)',
-                          ),
+                          decoration: const InputDecoration(labelText: 'Prix'),
                           keyboardType: const TextInputType.numberWithOptions(
                             decimal: true,
                           ),
+                        ),
+                        const SizedBox(height: 8),
+                        DropdownButtonFormField<String>(
+                          value: selectedCurrency,
+                          decoration: const InputDecoration(
+                            labelText: 'Type de devise',
+                          ),
+                          items: kSupportedCurrencies
+                              .map(
+                                (code) => DropdownMenuItem<String>(
+                                  value: code,
+                                  child: Text(AppCurrency.fromCode(code).label),
+                                ),
+                              )
+                              .toList(),
+                          onChanged: (value) {
+                            if (value == null) {
+                              return;
+                            }
+                            setDialogState(() => selectedCurrency = value);
+                          },
                         ),
                         TextField(
                           controller: quantityController,
@@ -458,6 +479,7 @@ class _ProductsScreenState extends State<ProductsScreen> {
                                         ? null
                                         : imageUrlController.text.trim(),
                                     price: parsedPrice,
+                                    currency: selectedCurrency,
                                     quantityInStock: parsedQty,
                                     minStockAlert: parsedMin,
                                     createdAt: product?.createdAt ?? now,

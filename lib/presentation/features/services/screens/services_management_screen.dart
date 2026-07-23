@@ -6,6 +6,7 @@ import 'package:intl/intl.dart';
 import 'package:provider/provider.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
+import '../../../../../core/utils/currency.dart';
 import '../../../../../data/models/service_model.dart';
 import '../../../../../data/models/service_order_model.dart';
 import '../../../../../data/providers/user_profile_provider.dart';
@@ -171,6 +172,7 @@ class _ServicesManagementScreenState extends State<ServicesManagementScreen> {
       text: initial?.durationMinutes?.toString() ?? '',
     );
     var active = initial?.isActive ?? true;
+    var selectedCurrency = normalizeCurrencyCode(initial?.currency);
 
     final saved = await showDialog<bool>(
       context: context,
@@ -198,6 +200,27 @@ class _ServicesManagementScreenState extends State<ServicesManagementScreen> {
                         decimal: true,
                       ),
                       decoration: const InputDecoration(labelText: 'Prix'),
+                    ),
+                    const SizedBox(height: 10),
+                    DropdownButtonFormField<String>(
+                      value: selectedCurrency,
+                      decoration: const InputDecoration(
+                        labelText: 'Type de devise',
+                      ),
+                      items: kSupportedCurrencies
+                          .map(
+                            (code) => DropdownMenuItem<String>(
+                              value: code,
+                              child: Text(AppCurrency.fromCode(code).label),
+                            ),
+                          )
+                          .toList(),
+                      onChanged: (value) {
+                        if (value == null) {
+                          return;
+                        }
+                        setLocalState(() => selectedCurrency = value);
+                      },
                     ),
                     const SizedBox(height: 10),
                     TextField(
@@ -267,6 +290,7 @@ class _ServicesManagementScreenState extends State<ServicesManagementScreen> {
               ? null
               : descCtrl.text.trim(),
           price: price,
+          currency: selectedCurrency,
           durationMinutes: duration,
           createdBy: initial?.createdBy,
           isActive: active,
@@ -378,9 +402,9 @@ class _ServicesManagementScreenState extends State<ServicesManagementScreen> {
   }
 
   String _orderMenuLabel(ServiceOrder order) {
-    final amount = order.totalAmount.toStringAsFixed(2);
+    final amount = formatMoney(order.totalAmount, order.paymentCurrency);
     final date = DateFormat('dd/MM HH:mm').format(order.createdAt);
-    return '${order.clientName} • $amount Gdes • $date';
+    return '${order.clientName} • $amount • $date';
   }
 
   Future<void> _openRecentTicketsPicker() async {
@@ -544,7 +568,10 @@ class _ServicesManagementScreenState extends State<ServicesManagementScreen> {
                                             ).colorScheme.primary,
                                           )
                                         : Text(
-                                            '${order.totalAmount.toStringAsFixed(2)} Gdes',
+                                            formatMoney(
+                                              order.totalAmount,
+                                              order.paymentCurrency,
+                                            ),
                                             style: TextStyle(
                                               color: Theme.of(context)
                                                   .textTheme
@@ -793,7 +820,10 @@ class _ServicesManagementScreenState extends State<ServicesManagementScreen> {
                                                     BorderRadius.circular(999),
                                               ),
                                               child: Text(
-                                                '${selectedOrder.totalAmount.toStringAsFixed(2)} Gdes',
+                                                formatMoney(
+                                                  selectedOrder.totalAmount,
+                                                  selectedOrder.paymentCurrency,
+                                                ),
                                                 style: TextStyle(
                                                   color: Theme.of(
                                                     context,
@@ -881,7 +911,7 @@ class _ServicesManagementScreenState extends State<ServicesManagementScreen> {
                         child: ListTile(
                           title: Text(service.name),
                           subtitle: Text(
-                            '${service.price.toStringAsFixed(2)} Gdes | ${service.durationMinutes ?? '-'} min | ${service.description ?? 'Sans description'}',
+                            '${formatMoney(service.price, service.currency)} | ${service.durationMinutes ?? '-'} min | ${service.description ?? 'Sans description'}',
                           ),
                           trailing: Wrap(
                             spacing: 8,

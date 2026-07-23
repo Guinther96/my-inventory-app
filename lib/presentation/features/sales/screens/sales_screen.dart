@@ -5,18 +5,24 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
 // Imports des modèles de données
+import '../../../../core/utils/currency.dart';
 import '../../../../data/models/category_model.dart';
 import '../../../../data/models/product_model.dart';
 import '../../../../data/models/stock_movement_model.dart';
 
 // Imports du provider de gestion d'inventaire
 import '../../../../data/providers/inventory_provider.dart';
+import '../../../../services/company/company_service.dart';
 import '../../../../services/features/feature_service.dart';
 import '../../../../services/printer/printer_service.dart';
 
 // Imports des widgets communs (barre latérale, drawer)
 import '../../../common_widgets/app_drawer.dart';
 import '../../../common_widgets/app_sidebar.dart';
+
+/// Alias local pour l'affichage des sous-totaux par devise dans le POS.
+String _formatCurrencyTotals(Map<String, double> totalsByCurrency) =>
+    formatMoneyByCurrency(totalsByCurrency);
 
 /// Écran principal de vente - Mode Caisse
 ///
@@ -56,6 +62,43 @@ class _SalesScreenState extends State<SalesScreen> {
   /// Flag pour savoir si l'opération d'encaissement est en cours
   bool _isSubmitting = false;
 
+  /// Devise choisie par le client pour payer le ticket courant. Null tant
+  /// que l'utilisateur n'a pas fait de choix explicite (une devise par
+  /// defaut est alors deduite du panier).
+  String? _selectedPaymentCurrency;
+
+  /// Taux de change (1 USD = X HTG) configure par le manager de l'entreprise.
+  double? _exchangeRate;
+  bool _isLoadingRate = true;
+
+  @override
+  void initState() {
+    super.initState();
+    _loadExchangeRate();
+  }
+
+  Future<void> _loadExchangeRate() async {
+    final companyId = context.read<InventoryProvider>().companyId;
+    if (companyId == null || companyId.isEmpty) {
+      setState(() => _isLoadingRate = false);
+      return;
+    }
+
+    try {
+      final rate = await CompanyService().fetchExchangeRate(companyId);
+      if (mounted) {
+        setState(() {
+          _exchangeRate = rate;
+          _isLoadingRate = false;
+        });
+      }
+    } catch (_) {
+      if (mounted) {
+        setState(() => _isLoadingRate = false);
+      }
+    }
+  }
+
   /// Nettoie les ressources quand le widget est détruit
   /// Dispose le contrôleur de texte pour éviter les fuites mémoire
   @override
@@ -63,6 +106,58 @@ class _SalesScreenState extends State<SalesScreen> {
     _notesController.dispose();
     super.dispose();
   }
+
+  /// Regroupe le montant total du panier par devise (un panier peut
+  /// melanger des produits HTG et USD).
+  Map<String, double> _cartTotalsByCurrency(List<_CartEntryData> entries) {
+    final totals = <String, double>{};
+    for (final entry in entries) {
+      totals.update(
+        entry.product.currency,
+        (value) => value + entry.lineTotal,
+        ifAbsent: () => entry.lineTotal,
+      );
+    }
+    return totals;
+  }
+
+  /// Devise de paiement effective: le choix explicite de l'utilisateur, ou
+  /// a defaut la devise unique du panier, ou HTG si le panier est mixte/vide.
+  String _resolvePaymentCurrency(Map<String, double> totalsByCurrency) {
+    if (_selectedPaymentCurrency != null) {
+      return _selectedPaymentCurrency!;
+    }
+    if (totalsByCurrency.length == 1) {
+      return totalsByCurrency.keys.first;
+    }
+    return 'HTG';
+  }
+
+  /// Convertit chaque sous-total dans la devise de paiement choisie.
+  /// Retourne null si une conversion est necessaire mais qu'aucun taux
+  /// de change n'est configure.
+  double? _convertedGrandTotal(
+    Map<String, double> totalsByCurrency,
+    String paymentCurrency,
+  ) {
+    var total = 0.0;
+    for (final entry in totalsByCurrency.entries) {
+      final converted = convertAmount(
+        amount: entry.value,
+        fromCurrency: entry.key,
+        toCurrency: paymentCurrency,
+        usdToHtgRate: _exchangeRate,
+      );
+      if (converted == null) {
+        return null;
+      }
+      total += converted;
+    }
+    return total;
+  }
+
+  String _formatTotalsByCurrency(Map<String, double> totalsByCurrency) =>
+      _formatCurrencyTotals(totalsByCurrency);
 
   Future<void> _scrollToMobileTicketPanel() async {
     final context = _mobileTicketPanelKey.currentContext;
@@ -111,16 +206,15 @@ class _SalesScreenState extends State<SalesScreen> {
                   0,
                   (sum, entry) => sum + entry.quantity,
                 );
-                final cartTotal = entries.fold<double>(
-                  0,
-                  (sum, entry) => sum + entry.lineTotal,
-                );
+                final cartTotalsByCurrency = _cartTotalsByCurrency(entries);
 
                 return _SelectedProductBottomBar(
                   entries: entries,
                   selectedEntry: selectedEntry,
                   totalItems: totalItems,
-                  cartTotal: cartTotal,
+                  cartTotalsLabel: _formatTotalsByCurrency(
+                    cartTotalsByCurrency,
+                  ),
                   onIncrement: selectedEntry == null
                       ? null
                       : () => _changeQuantity(selectedEntry.product, 1),
@@ -166,16 +260,37 @@ class _SalesScreenState extends State<SalesScreen> {
                   0,
                   (sum, entry) => sum + entry.quantity,
                 );
-                // Calcule le montant total du panier
-                final cartTotal = cartEntries.fold<double>(
-                  0,
-                  (sum, entry) => sum + entry.lineTotal,
+                // Calcule le montant total du panier, regroupe par devise
+                // (un panier peut melanger des produits HTG et USD).
+                final cartTotalsByCurrency = _cartTotalsByCurrency(
+                  cartEntries,
                 );
-                // Calcule le chiffre d'affaires du jour
-                final todayRevenue = todaySales.fold<double>(0, (sum, sale) {
+                // Devise de paiement choisie (ou deduite) pour le ticket
+                // courant, et son equivalent converti si necessaire.
+                final paymentCurrency = _resolvePaymentCurrency(
+                  cartTotalsByCurrency,
+                );
+                final convertedTotal = _convertedGrandTotal(
+                  cartTotalsByCurrency,
+                  paymentCurrency,
+                );
+                final conversionBlocked =
+                    cartEntries.isNotEmpty && convertedTotal == null;
+                // Calcule le chiffre d'affaires du jour, regroupe par devise
+                // (privilegie le prix/devise figes sur la vente si presents).
+                final todayRevenueByCurrency = <String, double>{};
+                for (final sale in todaySales) {
                   final product = inventory.findProductById(sale.productId);
-                  return sum + ((product?.price ?? 0) * sale.quantity);
-                });
+                  final unitPrice = sale.unitPrice ?? product?.price ?? 0;
+                  final currency = normalizeCurrencyCode(
+                    sale.productCurrency ?? product?.currency,
+                  );
+                  todayRevenueByCurrency.update(
+                    currency,
+                    (value) => value + (unitPrice * sale.quantity),
+                    ifAbsent: () => unitPrice * sale.quantity,
+                  );
+                }
 
                 return Padding(
                   padding: EdgeInsets.fromLTRB(
@@ -190,8 +305,8 @@ class _SalesScreenState extends State<SalesScreen> {
                             _PosHeader(
                               todaySalesCount: todaySales.length,
                               totalItems: totalItems,
-                              todayRevenue: todayRevenue,
-                              cartTotal: cartTotal,
+                              todayRevenueByCurrency: todayRevenueByCurrency,
+                              cartTotalsByCurrency: cartTotalsByCurrency,
                             ),
                             const SizedBox(height: 16),
                             Expanded(
@@ -206,7 +321,16 @@ class _SalesScreenState extends State<SalesScreen> {
                                       selectedEntry: selectedCartEntry,
                                       notesController: _notesController,
                                       totalItems: totalItems,
-                                      cartTotal: cartTotal,
+                                      cartTotalsByCurrency: cartTotalsByCurrency,
+                                      paymentCurrency: paymentCurrency,
+                                      convertedTotal: convertedTotal,
+                                      conversionBlocked: conversionBlocked,
+                                      isLoadingRate: _isLoadingRate,
+                                      onPaymentCurrencyChanged: (value) =>
+                                          setState(
+                                            () =>
+                                                _selectedPaymentCurrency = value,
+                                          ),
                                       isSubmitting: _isSubmitting,
                                       onSelectEntry: _selectCartProduct,
                                       onIncrement: (product) =>
@@ -221,11 +345,14 @@ class _SalesScreenState extends State<SalesScreen> {
                                           ? null
                                           : _clearCart,
                                       onCheckout:
-                                          _cartLines.isEmpty || _isSubmitting
+                                          _cartLines.isEmpty ||
+                                              _isSubmitting ||
+                                              conversionBlocked
                                           ? null
                                           : () => _checkoutCart(
                                               context,
                                               inventory,
+                                              paymentCurrency,
                                             ),
                                     ),
                                   ),
@@ -263,8 +390,8 @@ class _SalesScreenState extends State<SalesScreen> {
                               _PosHeader(
                                 todaySalesCount: todaySales.length,
                                 totalItems: totalItems,
-                                todayRevenue: todayRevenue,
-                                cartTotal: cartTotal,
+                                todayRevenueByCurrency: todayRevenueByCurrency,
+                                cartTotalsByCurrency: cartTotalsByCurrency,
                               ),
                               const SizedBox(height: 12),
                               KeyedSubtree(
@@ -275,7 +402,14 @@ class _SalesScreenState extends State<SalesScreen> {
                                   selectedEntry: selectedCartEntry,
                                   notesController: _notesController,
                                   totalItems: totalItems,
-                                  cartTotal: cartTotal,
+                                  cartTotalsByCurrency: cartTotalsByCurrency,
+                                  paymentCurrency: paymentCurrency,
+                                  convertedTotal: convertedTotal,
+                                  conversionBlocked: conversionBlocked,
+                                  isLoadingRate: _isLoadingRate,
+                                  onPaymentCurrencyChanged: (value) => setState(
+                                    () => _selectedPaymentCurrency = value,
+                                  ),
                                   isSubmitting: _isSubmitting,
                                   compact: true,
                                   onSelectEntry: _selectCartProduct,
@@ -290,9 +424,15 @@ class _SalesScreenState extends State<SalesScreen> {
                                       ? null
                                       : _clearCart,
                                   onCheckout:
-                                      _cartLines.isEmpty || _isSubmitting
+                                      _cartLines.isEmpty ||
+                                          _isSubmitting ||
+                                          conversionBlocked
                                       ? null
-                                      : () => _checkoutCart(context, inventory),
+                                      : () => _checkoutCart(
+                                          context,
+                                          inventory,
+                                          paymentCurrency,
+                                        ),
                                 ),
                               ),
                               const SizedBox(height: 12),
@@ -602,6 +742,7 @@ class _SalesScreenState extends State<SalesScreen> {
   Future<void> _checkoutCart(
     BuildContext context,
     InventoryProvider inventory,
+    String paymentCurrency,
   ) async {
     // Sort si le panier est vide ou si une autre soumission est en cours
     if (_cartLines.isEmpty || _isSubmitting) {
@@ -635,10 +776,16 @@ class _SalesScreenState extends State<SalesScreen> {
           movementType: 'exit',
           quantity: line.quantity,
           notes: note.isEmpty ? 'Vente caisse' : note,
+          paymentCurrency: paymentCurrency,
         );
       }
 
-      await _tryPrintSaleReceipt(context, inventory, checkoutLines);
+      await _tryPrintSaleReceipt(
+        context,
+        inventory,
+        checkoutLines,
+        paymentCurrency,
+      );
 
       // Vérifie que le contexte est toujours valide après les appels async
       if (!context.mounted) {
@@ -679,6 +826,7 @@ class _SalesScreenState extends State<SalesScreen> {
     BuildContext context,
     InventoryProvider inventory,
     List<_CartLine> checkoutLines,
+    String paymentCurrency,
   ) async {
     if (!FeatureService.isEnabled('print')) {
       return;
@@ -708,6 +856,7 @@ class _SalesScreenState extends State<SalesScreen> {
           'name': product.name,
           'quantity': line.quantity,
           'price': product.price,
+          'currency': product.currency,
         });
       }
 
@@ -715,17 +864,29 @@ class _SalesScreenState extends State<SalesScreen> {
         return;
       }
 
-      final total = items.fold<double>(
-        0,
-        (sum, item) =>
-            sum + ((item['quantity'] as int) * (item['price'] as double)),
+      final totalsByCurrency = <String, double>{};
+      for (final item in items) {
+        final currency = normalizeCurrencyCode(item['currency'] as String?);
+        final lineTotal =
+            (item['quantity'] as int) * (item['price'] as double);
+        totalsByCurrency.update(
+          currency,
+          (value) => value + lineTotal,
+          ifAbsent: () => lineTotal,
+        );
+      }
+
+      final convertedTotal = _convertedGrandTotal(
+        totalsByCurrency,
+        paymentCurrency,
       );
 
       await PrinterService.printSaleReceipt(
         companyName: inventory.companyName,
         companyEmail: inventory.companyEmail,
         items: items,
-        total: total,
+        total: convertedTotal ?? 0,
+        paymentCurrency: paymentCurrency,
       );
     } catch (e, st) {
       debugPrint('Print sale receipt failed: $e');
@@ -796,14 +957,14 @@ class _SalesScreenState extends State<SalesScreen> {
 class _PosHeader extends StatelessWidget {
   final int todaySalesCount;
   final int totalItems;
-  final double todayRevenue;
-  final double cartTotal;
+  final Map<String, double> todayRevenueByCurrency;
+  final Map<String, double> cartTotalsByCurrency;
 
   const _PosHeader({
     required this.todaySalesCount,
     required this.totalItems,
-    required this.todayRevenue,
-    required this.cartTotal,
+    required this.todayRevenueByCurrency,
+    required this.cartTotalsByCurrency,
   });
 
   @override
@@ -857,13 +1018,13 @@ class _PosHeader extends StatelessWidget {
           // Métrique 3: Chiffre d'affaires généré aujourd'hui
           _HeaderMetric(
             title: 'CA du jour',
-            value: '${todayRevenue.toStringAsFixed(2)} Gdes',
+            value: _formatCurrencyTotals(todayRevenueByCurrency),
             icon: Icons.trending_up,
           ),
           // Métrique 4: Total du ticket courant (montant à payer)
           _HeaderMetric(
             title: 'Total ticket',
-            value: '${cartTotal.toStringAsFixed(2)} Gdes',
+            value: _formatCurrencyTotals(cartTotalsByCurrency),
             icon: Icons.payments,
             accent: Theme.of(context).colorScheme.secondary,
           ),
@@ -981,7 +1142,12 @@ class _TicketPanel extends StatelessWidget {
   final _CartEntryData? selectedEntry;
   final TextEditingController notesController;
   final int totalItems;
-  final double cartTotal;
+  final Map<String, double> cartTotalsByCurrency;
+  final String paymentCurrency;
+  final double? convertedTotal;
+  final bool conversionBlocked;
+  final bool isLoadingRate;
+  final ValueChanged<String> onPaymentCurrencyChanged;
   final bool isSubmitting;
   final bool compact;
   final ValueChanged<String> onSelectEntry;
@@ -998,7 +1164,12 @@ class _TicketPanel extends StatelessWidget {
     required this.selectedEntry,
     required this.notesController,
     required this.totalItems,
-    required this.cartTotal,
+    required this.cartTotalsByCurrency,
+    required this.paymentCurrency,
+    required this.convertedTotal,
+    required this.conversionBlocked,
+    required this.isLoadingRate,
+    required this.onPaymentCurrencyChanged,
     required this.isSubmitting,
     required this.onSelectEntry,
     required this.onIncrement,
@@ -1104,7 +1275,7 @@ class _TicketPanel extends StatelessWidget {
               borderRadius: BorderRadius.circular(16),
             ),
             child: Text(
-              '${cartTotal.toStringAsFixed(2)} Gdes',
+              _formatCurrencyTotals(cartTotalsByCurrency),
               style: TextStyle(
                 color: Theme.of(context).colorScheme.secondary,
                 fontWeight: FontWeight.w800,
@@ -1194,6 +1365,12 @@ class _TicketPanel extends StatelessWidget {
                   ),
                 ),
                 const SizedBox(height: 12),
+                _PaymentCurrencySelector(
+                  paymentCurrency: paymentCurrency,
+                  onChanged: onPaymentCurrencyChanged,
+                  isLoadingRate: isLoadingRate,
+                ),
+                const SizedBox(height: 12),
                 Container(
                   padding: const EdgeInsets.all(16),
                   decoration: BoxDecoration(
@@ -1217,10 +1394,17 @@ class _TicketPanel extends StatelessWidget {
                               fit: BoxFit.scaleDown,
                               alignment: Alignment.centerRight,
                               child: Text(
-                                '${cartTotal.toStringAsFixed(2)} Gdes',
-                                style: const TextStyle(
-                                  color: Colors.white,
-                                  fontSize: 24,
+                                conversionBlocked
+                                    ? 'Taux de change requis'
+                                    : formatMoney(
+                                        convertedTotal ?? 0,
+                                        paymentCurrency,
+                                      ),
+                                style: TextStyle(
+                                  color: conversionBlocked
+                                      ? Colors.orangeAccent
+                                      : Colors.white,
+                                  fontSize: conversionBlocked ? 15 : 24,
                                   fontWeight: FontWeight.w800,
                                 ),
                               ),
@@ -1340,6 +1524,12 @@ class _TicketPanel extends StatelessWidget {
         ),
       ),
       const SizedBox(height: 16),
+      _PaymentCurrencySelector(
+        paymentCurrency: paymentCurrency,
+        onChanged: onPaymentCurrencyChanged,
+        isLoadingRate: isLoadingRate,
+      ),
+      const SizedBox(height: 16),
       Container(
         padding: const EdgeInsets.all(16),
         decoration: BoxDecoration(
@@ -1363,10 +1553,14 @@ class _TicketPanel extends StatelessWidget {
                     fit: BoxFit.scaleDown,
                     alignment: Alignment.centerRight,
                     child: Text(
-                      '${cartTotal.toStringAsFixed(2)} Gdes',
-                      style: const TextStyle(
-                        color: Colors.white,
-                        fontSize: 24,
+                      conversionBlocked
+                          ? 'Taux de change requis'
+                          : formatMoney(convertedTotal ?? 0, paymentCurrency),
+                      style: TextStyle(
+                        color: conversionBlocked
+                            ? Colors.orangeAccent
+                            : Colors.white,
+                        fontSize: conversionBlocked ? 15 : 24,
                         fontWeight: FontWeight.w800,
                       ),
                     ),
@@ -1423,6 +1617,57 @@ class _TicketPanel extends StatelessWidget {
     ]);
 
     return widgets;
+  }
+}
+
+/// Selecteur "Mode de paiement" (HTG / USD) affiche dans le ticket.
+/// Determine la devise dans laquelle le montant total est encaisse,
+/// independamment de la devise native de chaque produit du panier.
+class _PaymentCurrencySelector extends StatelessWidget {
+  final String paymentCurrency;
+  final ValueChanged<String> onChanged;
+  final bool isLoadingRate;
+
+  const _PaymentCurrencySelector({
+    required this.paymentCurrency,
+    required this.onChanged,
+    required this.isLoadingRate,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        const Text(
+          'Mode de paiement',
+          style: TextStyle(fontWeight: FontWeight.w700),
+        ),
+        Row(
+          children: kSupportedCurrencies.map((code) {
+            return Expanded(
+              child: RadioListTile<String>(
+                contentPadding: EdgeInsets.zero,
+                dense: true,
+                value: code,
+                groupValue: paymentCurrency,
+                title: Text(
+                  AppCurrency.fromCode(code).label,
+                  style: const TextStyle(fontSize: 13),
+                ),
+                onChanged: isLoadingRate
+                    ? null
+                    : (value) {
+                        if (value != null) {
+                          onChanged(value);
+                        }
+                      },
+              ),
+            );
+          }).toList(),
+        ),
+      ],
+    );
   }
 }
 
@@ -1592,7 +1837,7 @@ class _CartEntryTile extends StatelessWidget {
                       ),
                       const SizedBox(height: 6),
                       Text(
-                        '${entry.product.price.toStringAsFixed(2)} Gdes x ${entry.quantity}',
+                        '${formatMoney(entry.product.price, entry.product.currency)} x ${entry.quantity}',
                         style: TextStyle(
                           color: Theme.of(
                             context,
@@ -1627,7 +1872,7 @@ class _CartEntryTile extends StatelessWidget {
                 _SquareIconButton(icon: Icons.add, onPressed: onIncrement),
                 const Spacer(),
                 Text(
-                  '${entry.lineTotal.toStringAsFixed(2)} Gdes',
+                  formatMoney(entry.lineTotal, entry.product.currency),
                   style: TextStyle(
                     fontSize: 17,
                     fontWeight: FontWeight.w800,
@@ -1740,7 +1985,7 @@ class _SelectedProductBottomBar extends StatelessWidget {
   final List<_CartEntryData> entries;
   final _CartEntryData? selectedEntry;
   final int totalItems;
-  final double cartTotal;
+  final String cartTotalsLabel;
   final VoidCallback? onIncrement;
   final VoidCallback? onDecrement;
   final VoidCallback onTapTicket;
@@ -1749,7 +1994,7 @@ class _SelectedProductBottomBar extends StatelessWidget {
     required this.entries,
     required this.selectedEntry,
     required this.totalItems,
-    required this.cartTotal,
+    required this.cartTotalsLabel,
     required this.onIncrement,
     required this.onDecrement,
     required this.onTapTicket,
@@ -1791,7 +2036,7 @@ class _SelectedProductBottomBar extends StatelessWidget {
                 builder: (context, constraints) {
                   final isNarrow = constraints.maxWidth < 380;
                   final detailsText =
-                      '$totalItems article${totalItems > 1 ? 's' : ''} • ${cartTotal.toStringAsFixed(2)} Gdes';
+                      '$totalItems article${totalItems > 1 ? 's' : ''} • $cartTotalsLabel';
 
                   Widget quantityControls({bool alignEnd = true}) {
                     return Column(
@@ -2484,7 +2729,7 @@ class _ProductTile extends StatelessWidget {
                 children: [
                   // Prix unitaire
                   Text(
-                    '${product.price.toStringAsFixed(2)} Gdes',
+                    formatMoney(product.price, product.currency),
                     style: const TextStyle(
                       fontSize: 18,
                       fontWeight: FontWeight.w800,
@@ -2720,7 +2965,11 @@ class _RecentSalesPanel extends StatelessWidget {
                 final date = sale.createdAt;
                 final dateText =
                     '${date.day.toString().padLeft(2, '0')}/${date.month.toString().padLeft(2, '0')} ${date.hour.toString().padLeft(2, '0')}:${date.minute.toString().padLeft(2, '0')}';
-                final price = (product?.price ?? 0) * sale.quantity;
+                final unitPrice = sale.unitPrice ?? product?.price ?? 0;
+                final price = unitPrice * sale.quantity;
+                final priceCurrency = normalizeCurrencyCode(
+                  sale.productCurrency ?? product?.currency,
+                );
 
                 return Row(
                   children: [
@@ -2755,7 +3004,7 @@ class _RecentSalesPanel extends StatelessWidget {
                       ),
                     ),
                     Text(
-                      '${price.toStringAsFixed(2)} Gdes',
+                      formatMoney(price, priceCurrency),
                       style: TextStyle(
                         fontWeight: FontWeight.w800,
                         color: Theme.of(context).brightness == Brightness.dark

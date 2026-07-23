@@ -43,6 +43,7 @@ class ServiceOrderPrinterService {
         price: order.totalAmount,
         clientName: order.clientName,
         cashierName: order.cashierName,
+        currency: order.paymentCurrency,
       );
 
       debugPrint('Service order printed successfully: ${order.id}');

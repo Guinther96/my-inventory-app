@@ -8,6 +8,13 @@ class StockMovement {
   final String? notes;
   final DateTime createdAt;
 
+  // Currency/payment snapshot, only populated for sale ('exit') movements.
+  final double? unitPrice;
+  final String? productCurrency;
+  final String? paymentCurrency;
+  final double? exchangeRate;
+  final double? amountPaid;
+
   StockMovement({
     required this.id,
     required this.productId,
@@ -17,6 +24,11 @@ class StockMovement {
     required this.quantity,
     this.notes,
     required this.createdAt,
+    this.unitPrice,
+    this.productCurrency,
+    this.paymentCurrency,
+    this.exchangeRate,
+    this.amountPaid,
   });
 
   static String _normalizeMovementType(dynamic rawType) {
@@ -53,6 +65,11 @@ class StockMovement {
       notes: json['notes'],
       createdAt:
           DateTime.tryParse(createdAtRaw?.toString() ?? '') ?? DateTime.now(),
+      unitPrice: double.tryParse(json['unit_price']?.toString() ?? ''),
+      productCurrency: json['product_currency']?.toString(),
+      paymentCurrency: json['payment_currency']?.toString(),
+      exchangeRate: double.tryParse(json['exchange_rate']?.toString() ?? ''),
+      amountPaid: double.tryParse(json['amount_paid']?.toString() ?? ''),
     );
   }
 
@@ -65,6 +82,11 @@ class StockMovement {
     int? quantity,
     String? notes,
     DateTime? createdAt,
+    double? unitPrice,
+    String? productCurrency,
+    String? paymentCurrency,
+    double? exchangeRate,
+    double? amountPaid,
   }) {
     return StockMovement(
       id: id ?? this.id,
@@ -75,6 +97,11 @@ class StockMovement {
       quantity: quantity ?? this.quantity,
       notes: notes ?? this.notes,
       createdAt: createdAt ?? this.createdAt,
+      unitPrice: unitPrice ?? this.unitPrice,
+      productCurrency: productCurrency ?? this.productCurrency,
+      paymentCurrency: paymentCurrency ?? this.paymentCurrency,
+      exchangeRate: exchangeRate ?? this.exchangeRate,
+      amountPaid: amountPaid ?? this.amountPaid,
     );
   }
 
@@ -86,6 +113,11 @@ class StockMovement {
       'type': _normalizeMovementType(movementType),
       'quantity': quantity,
       if (notes != null) 'notes': notes,
+      if (unitPrice != null) 'unit_price': unitPrice,
+      if (productCurrency != null) 'product_currency': productCurrency,
+      if (paymentCurrency != null) 'payment_currency': paymentCurrency,
+      if (exchangeRate != null) 'exchange_rate': exchangeRate,
+      if (amountPaid != null) 'amount_paid': amountPaid,
     };
   }
 }

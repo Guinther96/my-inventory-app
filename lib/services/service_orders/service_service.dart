@@ -51,6 +51,7 @@ class ServiceService {
       'name': service.name,
       'description': service.description,
       'price': service.price,
+      'currency': service.currency,
       'duration_minutes': service.durationMinutes,
       if (isNew) 'created_by': currentUserId,
       'is_active': service.isActive,

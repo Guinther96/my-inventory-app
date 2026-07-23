@@ -91,4 +91,23 @@ class CompanyService {
 
     return row?['email']?.toString();
   }
+
+  // Taux de change (1 USD = X HTG) configure par le manager de l'entreprise.
+  Future<double?> fetchExchangeRate(String companyId) async {
+    final row = await _client
+        .from('companies')
+        .select('usd_to_htg_rate')
+        .eq('id', companyId)
+        .maybeSingle();
+
+    return double.tryParse(row?['usd_to_htg_rate']?.toString() ?? '');
+  }
+
+  // Reserve aux managers cote RLS (policy companies_update_own_manager_active).
+  Future<void> updateExchangeRate(String companyId, double rate) async {
+    await _client
+        .from('companies')
+        .update({'usd_to_htg_rate': rate})
+        .eq('id', companyId);
+  }
 }

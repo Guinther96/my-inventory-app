@@ -1,3 +1,4 @@
+import '../../core/utils/currency.dart';
 import 'service_order_item_model.dart';
 
 class ServiceOrder {
@@ -15,6 +16,8 @@ class ServiceOrder {
   final double discountAmount;
   final double totalAmount;
   final double paidAmount;
+  final String paymentCurrency;
+  final double? exchangeRate;
   final String? notes;
   final DateTime createdAt;
   final DateTime updatedAt;
@@ -35,6 +38,8 @@ class ServiceOrder {
     required this.discountAmount,
     required this.totalAmount,
     required this.paidAmount,
+    this.paymentCurrency = 'HTG',
+    this.exchangeRate,
     this.notes,
     required this.createdAt,
     required this.updatedAt,
@@ -73,6 +78,10 @@ class ServiceOrder {
           double.tryParse(json['discount_amount']?.toString() ?? '') ?? 0,
       totalAmount: double.tryParse(json['total_amount']?.toString() ?? '') ?? 0,
       paidAmount: double.tryParse(json['paid_amount']?.toString() ?? '') ?? 0,
+      paymentCurrency: normalizeCurrencyCode(
+        json['payment_currency']?.toString(),
+      ),
+      exchangeRate: double.tryParse(json['exchange_rate']?.toString() ?? ''),
       notes: json['notes']?.toString(),
       createdAt:
           DateTime.tryParse(createdAtRaw?.toString() ?? '') ?? DateTime.now(),
@@ -98,6 +107,8 @@ class ServiceOrder {
       'discount_amount': discountAmount,
       'total_amount': totalAmount,
       'paid_amount': paidAmount,
+      'payment_currency': paymentCurrency,
+      if (exchangeRate != null) 'exchange_rate': exchangeRate,
       'notes': notes,
     };
   }

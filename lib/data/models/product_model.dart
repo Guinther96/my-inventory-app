@@ -1,3 +1,5 @@
+import '../../core/utils/currency.dart';
+
 class Product {
   final String id;
   final String? categoryId;
@@ -5,6 +7,7 @@ class Product {
   final String? description;
   final String? barcode;
   final double price;
+  final String currency;
   final int quantityInStock;
   final int minStockAlert;
   final String? imageUrl;
@@ -18,6 +21,7 @@ class Product {
     this.description,
     this.barcode,
     required this.price,
+    this.currency = 'HTG',
     required this.quantityInStock,
     this.minStockAlert = 5,
     this.imageUrl,
@@ -42,6 +46,7 @@ class Product {
       price: json['price'] != null
           ? double.parse(json['price'].toString())
           : 0.0,
+      currency: normalizeCurrencyCode(json['currency']?.toString()),
       quantityInStock: quantity,
       minStockAlert: minStock,
       imageUrl: json['images_url'] ?? json['image_url'],
@@ -59,6 +64,7 @@ class Product {
     String? description,
     String? barcode,
     double? price,
+    String? currency,
     int? quantityInStock,
     int? minStockAlert,
     String? imageUrl,
@@ -72,6 +78,7 @@ class Product {
       description: description ?? this.description,
       barcode: barcode ?? this.barcode,
       price: price ?? this.price,
+      currency: currency ?? this.currency,
       quantityInStock: quantityInStock ?? this.quantityInStock,
       minStockAlert: minStockAlert ?? this.minStockAlert,
       imageUrl: imageUrl ?? this.imageUrl,
@@ -88,6 +95,7 @@ class Product {
       if (description != null) 'description': description,
       if (barcode != null) 'barcode': barcode,
       'price': price,
+      'currency': currency,
       'quantity': quantityInStock,
       'min_stock': minStockAlert,
       if (imageUrl != null) 'images_url': imageUrl,

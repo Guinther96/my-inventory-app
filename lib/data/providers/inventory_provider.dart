@@ -55,6 +55,20 @@ class InventoryProvider extends ChangeNotifier {
   double get totalStockValue =>
       _products.fold(0, (sum, p) => sum + (p.price * p.quantityInStock));
 
+  // Regroupe la valeur de stock par devise (un stock mixte HTG/USD ne peut
+  // pas etre resume par un montant unique).
+  Map<String, double> get totalStockValueByCurrency {
+    final totals = <String, double>{};
+    for (final product in _products) {
+      totals.update(
+        product.currency,
+        (value) => value + (product.price * product.quantityInStock),
+        ifAbsent: () => product.price * product.quantityInStock,
+      );
+    }
+    return totals;
+  }
+
   List<StockMovement> get recentMovements {
     final sorted = [..._movements]
       ..sort((a, b) => b.createdAt.compareTo(a.createdAt));
@@ -239,6 +253,7 @@ class InventoryProvider extends ChangeNotifier {
     required String movementType,
     required int quantity,
     String? notes,
+    String? paymentCurrency,
   }) async {
     final tenantId = _companyId;
     if (tenantId == null) {
@@ -256,6 +271,7 @@ class InventoryProvider extends ChangeNotifier {
       movementType: movementType,
       quantity: quantity,
       notes: notes,
+      paymentCurrency: paymentCurrency,
     );
 
     final updatedProductRaw = Map<String, dynamic>.from(

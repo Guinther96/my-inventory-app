@@ -5,6 +5,7 @@ import 'package:go_router/go_router.dart';
 import 'package:provider/provider.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
+import '../../../../core/utils/currency.dart';
 import '../../../../data/models/service_order_model.dart';
 import '../../../../data/models/stock_movement_model.dart';
 import '../../../../data/providers/inventory_provider.dart';
@@ -175,7 +176,11 @@ class _DashboardScreenState extends State<DashboardScreen> {
       }
 
       final product = inventory.findProductById(movement.productId);
-      final unitPrice = product?.price ?? 0;
+      // Privilegie le prix fige sur la vente (traçabilite historique exacte
+      // meme si le prix du produit a change depuis), sinon retombe sur le
+      // prix courant du produit pour les mouvements anterieurs a la
+      // migration multi-devise.
+      final unitPrice = movement.unitPrice ?? product?.price ?? 0;
       totalsByDay[day] =
           (totalsByDay[day] ?? 0) + (unitPrice * movement.quantity);
     }
@@ -189,6 +194,50 @@ class _DashboardScreenState extends State<DashboardScreen> {
           ),
         )
         .toList();
+  }
+
+  /// Meme fenetre que [_buildSalesSeries], mais regroupe le total par devise
+  /// (un total unique en "Gdes" serait faux si l'entreprise vend aussi en USD).
+  Map<String, double> _buildSalesTotalsByCurrency(
+    InventoryProvider inventory, {
+    required int days,
+  }) {
+    final now = DateTime.now();
+    final firstDay = DateTime(
+      now.year,
+      now.month,
+      now.day,
+    ).subtract(Duration(days: days - 1));
+
+    final totalsByCurrency = <String, double>{};
+
+    for (final movement in inventory.movements) {
+      if (movement.movementType != 'exit') {
+        continue;
+      }
+
+      final day = DateTime(
+        movement.createdAt.year,
+        movement.createdAt.month,
+        movement.createdAt.day,
+      );
+      if (day.isBefore(firstDay)) {
+        continue;
+      }
+
+      final product = inventory.findProductById(movement.productId);
+      final unitPrice = movement.unitPrice ?? product?.price ?? 0;
+      final currency = normalizeCurrencyCode(
+        movement.productCurrency ?? product?.currency,
+      );
+      totalsByCurrency.update(
+        currency,
+        (value) => value + (unitPrice * movement.quantity),
+        ifAbsent: () => unitPrice * movement.quantity,
+      );
+    }
+
+    return totalsByCurrency;
   }
 
   /// Retourne un label compact pour l'axe X.
@@ -299,6 +348,10 @@ class _DashboardScreenState extends State<DashboardScreen> {
                   inventory,
                   days: _selectedSalesWindowDays,
                 );
+                final salesTotalsByCurrency = _buildSalesTotalsByCurrency(
+                  inventory,
+                  days: _selectedSalesWindowDays,
+                );
                 final visitsSeries = _buildVisitsSeries(
                   days: _selectedVisitsWindowDays,
                 );
@@ -353,8 +406,9 @@ class _DashboardScreenState extends State<DashboardScreen> {
                               _ModernSummaryCard(
                                 width: cardWidth,
                                 title: 'Valeur du stock',
-                                value:
-                                    '${inventory.totalStockValue.toStringAsFixed(2)} Gdes',
+                                value: formatMoneyByCurrency(
+                                  inventory.totalStockValueByCurrency,
+                                ),
                                 subtitle: 'Valeur globale des articles',
                                 icon: Icons.account_balance_wallet_rounded,
                                 accent: const Color(0xFF15803D),
@@ -366,6 +420,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                       const SizedBox(height: 20),
                       _SalesChartCard(
                         points: salesSeries,
+                        totalsByCurrency: salesTotalsByCurrency,
                         days: _selectedSalesWindowDays,
                         onDaysChanged: (days) {
                           setState(() => _selectedSalesWindowDays = days);
@@ -733,11 +788,13 @@ class _VisitsChartCard extends StatelessWidget {
 /// Carte graphique affichant les ventes des 7 derniers jours.
 class _SalesChartCard extends StatelessWidget {
   final List<_SalesPoint> points;
+  final Map<String, double> totalsByCurrency;
   final int days;
   final ValueChanged<int> onDaysChanged;
 
   const _SalesChartCard({
     required this.points,
+    required this.totalsByCurrency,
     required this.days,
     required this.onDaysChanged,
   });
@@ -747,7 +804,6 @@ class _SalesChartCard extends StatelessWidget {
     final theme = Theme.of(context);
     final colorScheme = theme.colorScheme;
 
-    final total = points.fold<double>(0, (sum, p) => sum + p.amount);
     final maxAmount = points.fold<double>(0, (max, p) {
       return p.amount > max ? p.amount : max;
     });
@@ -784,7 +840,7 @@ class _SalesChartCard extends StatelessWidget {
                     ),
                     const SizedBox(height: 4),
                     Text(
-                      'Evolution quotidienne des sorties en Gourdes.',
+                      'Evolution quotidienne des sorties.',
                       style: TextStyle(color: colorScheme.onSurfaceVariant),
                     ),
                   ],
@@ -819,7 +875,11 @@ class _SalesChartCard extends StatelessWidget {
                   borderRadius: BorderRadius.circular(999),
                 ),
                 child: Text(
-                  '${_compact(total)} Gdes',
+                  totalsByCurrency.isEmpty
+                      ? '0 HTG'
+                      : totalsByCurrency.entries
+                            .map((e) => '${_compact(e.value)} ${e.key}')
+                            .join(' + '),
                   style: TextStyle(
                     color: colorScheme.onPrimaryContainer,
                     fontWeight: FontWeight.w800,

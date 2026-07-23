@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
+import '../../../../core/utils/currency.dart';
 import '../../../../data/models/service_order_model.dart';
 import '../../../../data/models/stock_movement_model.dart';
 import '../../../../data/models/user_profile_model.dart';
@@ -110,7 +111,11 @@ class _ReportsScreenState extends State<ReportsScreen> {
 
       final sellerKey = _sellerKeyFor(movement);
       final product = inventory.findProductById(movement.productId);
-      final lineRevenue = (product?.price ?? 0) * movement.quantity;
+      final unitPrice = movement.unitPrice ?? product?.price ?? 0;
+      final lineRevenue = unitPrice * movement.quantity;
+      final currency = normalizeCurrencyCode(
+        movement.productCurrency ?? product?.currency,
+      );
 
       final current = bySeller[sellerKey];
       if (current == null) {
@@ -118,12 +123,22 @@ class _ReportsScreenState extends State<ReportsScreen> {
           salesCount: 1,
           totalQuantity: movement.quantity,
           totalRevenue: lineRevenue,
+          revenueByCurrency: {currency: lineRevenue},
         );
       } else {
+        final revenueByCurrency = Map<String, double>.from(
+          current.revenueByCurrency,
+        );
+        revenueByCurrency.update(
+          currency,
+          (value) => value + lineRevenue,
+          ifAbsent: () => lineRevenue,
+        );
         bySeller[sellerKey] = _SellerSalesAccumulator(
           salesCount: current.salesCount + 1,
           totalQuantity: current.totalQuantity + movement.quantity,
           totalRevenue: current.totalRevenue + lineRevenue,
+          revenueByCurrency: revenueByCurrency,
         );
       }
     }
@@ -140,6 +155,7 @@ class _ReportsScreenState extends State<ReportsScreen> {
         salesCount: acc.salesCount,
         totalQuantity: acc.totalQuantity,
         totalRevenue: acc.totalRevenue,
+        revenueByCurrency: acc.revenueByCurrency,
       );
     }).toList()..sort((a, b) => b.totalRevenue.compareTo(a.totalRevenue));
 
@@ -274,8 +290,9 @@ class _ReportsScreenState extends State<ReportsScreen> {
                           ),
                           _ReportCard(
                             title: 'Valeur totale stock',
-                            value:
-                                '${inventory.totalStockValue.toStringAsFixed(2)} Gdes',
+                            value: formatMoneyByCurrency(
+                              inventory.totalStockValueByCurrency,
+                            ),
                             icon: Icons.payments,
                             color: const Color(0xFF15803D),
                           ),
@@ -460,11 +477,13 @@ class _SellerSalesAccumulator {
   final int salesCount;
   final int totalQuantity;
   final double totalRevenue;
+  final Map<String, double> revenueByCurrency;
 
   const _SellerSalesAccumulator({
     required this.salesCount,
     required this.totalQuantity,
     required this.totalRevenue,
+    required this.revenueByCurrency,
   });
 }
 
@@ -474,6 +493,7 @@ class _SellerSalesResult {
   final int salesCount;
   final int totalQuantity;
   final double totalRevenue;
+  final Map<String, double> revenueByCurrency;
 
   const _SellerSalesResult({
     required this.sellerId,
@@ -481,6 +501,7 @@ class _SellerSalesResult {
     required this.salesCount,
     required this.totalQuantity,
     required this.totalRevenue,
+    required this.revenueByCurrency,
   });
 }
 
@@ -528,10 +549,16 @@ class _SellerResultsSectionState extends State<_SellerResultsSection> {
       0,
       (sum, item) => sum + item.totalQuantity,
     );
-    final totalRevenue = sortedResults.fold<double>(
-      0,
-      (sum, item) => sum + item.totalRevenue,
-    );
+    final totalRevenueByCurrency = <String, double>{};
+    for (final item in sortedResults) {
+      for (final entry in item.revenueByCurrency.entries) {
+        totalRevenueByCurrency.update(
+          entry.key,
+          (value) => value + entry.value,
+          ifAbsent: () => entry.value,
+        );
+      }
+    }
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -569,7 +596,7 @@ class _SellerResultsSectionState extends State<_SellerResultsSection> {
                 ),
               ),
               Text(
-                'CA: ${totalRevenue.toStringAsFixed(2)} Gdes',
+                'CA: ${formatMoneyByCurrency(totalRevenueByCurrency)}',
                 style: TextStyle(
                   color: Theme.of(context).colorScheme.onPrimaryContainer,
                   fontWeight: FontWeight.w800,
@@ -680,7 +707,7 @@ class _SellerResultsSectionState extends State<_SellerResultsSection> {
                       Text('Nombre de ventes: ${seller.salesCount}'),
                       Text('Quantité totale: ${seller.totalQuantity}'),
                       Text(
-                        'CA total: ${seller.totalRevenue.toStringAsFixed(2)} Gdes',
+                        'CA total: ${formatMoneyByCurrency(seller.revenueByCurrency)}',
                       ),
                       const SizedBox(height: 16),
                       Text(
@@ -727,7 +754,7 @@ class _SellerResultsSectionState extends State<_SellerResultsSection> {
                               return ListTile(
                                 dense: true,
                                 title: Text(
-                                  '${order.clientName} - ${order.totalAmount.toStringAsFixed(2)} Gdes',
+                                  '${order.clientName} - ${formatMoney(order.totalAmount, order.paymentCurrency)}',
                                 ),
                                 subtitle: Text(
                                   '${_formatDateTime(order.createdAt)}\n$servicesLabel',
@@ -815,7 +842,7 @@ class _SellerResultCard extends StatelessWidget {
               crossAxisAlignment: CrossAxisAlignment.end,
               children: [
                 Text(
-                  '${result.totalRevenue.toStringAsFixed(2)} Gdes',
+                  formatMoneyByCurrency(result.revenueByCurrency),
                   style: const TextStyle(fontWeight: FontWeight.w800),
                 ),
                 const SizedBox(height: 6),
