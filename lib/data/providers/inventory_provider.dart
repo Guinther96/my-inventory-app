@@ -310,17 +310,27 @@ class InventoryProvider extends ChangeNotifier {
       return;
     }
 
+    // Recupere d'abord toutes les donnees distantes: aucun `await` ne doit se
+    // trouver entre clear() et addAll() ci-dessous, sinon une mutation optimiste
+    // concurrente (ex: creation de categorie declenchant aussi ce reload via
+    // Realtime) peut s'inserer dans cette fenetre et produire des doublons.
+    final fetchedCategories = await _inventoryService.fetchCategories(
+      tenantId,
+    );
+    final fetchedProducts = await _inventoryService.fetchProducts(tenantId);
+    final fetchedMovements = await _inventoryService.fetchMovements(tenantId);
+
     _categories
       ..clear()
-      ..addAll(await _inventoryService.fetchCategories(tenantId));
+      ..addAll(fetchedCategories);
 
     _products
       ..clear()
-      ..addAll(await _inventoryService.fetchProducts(tenantId));
+      ..addAll(fetchedProducts);
 
     _movements
       ..clear()
-      ..addAll(await _inventoryService.fetchMovements(tenantId));
+      ..addAll(fetchedMovements);
   }
 
   void _configureRealtime(String companyId) {

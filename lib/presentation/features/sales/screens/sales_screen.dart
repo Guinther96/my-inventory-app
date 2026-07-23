@@ -46,11 +46,9 @@ class _SalesScreenState extends State<SalesScreen> {
   /// Requête de recherche pour filtrer les produits
   String _searchQuery = '';
 
-  /// ID de la catégorie sélectionnée pour le filtrage
-  String? _selectedCategoryId;
-
-  /// ID de la catégorie parent sélectionnée pour afficher ses sous-catégories
-  String? _selectedParentCategoryId;
+  /// Chemin des catégories sélectionnées, de la racine jusqu'au niveau consulté.
+  /// Permet de naviguer et filtrer sur un nombre illimité de niveaux de sous-catégories.
+  List<String> _selectedCategoryPath = <String>[];
 
   /// ID du produit actuellement sélectionné dans le panier
   String? _selectedCartProductId;
@@ -237,9 +235,7 @@ class _SalesScreenState extends State<SalesScreen> {
                                       isTablet: isTablet,
                                       products: filteredProducts,
                                       categories: categories,
-                                      selectedCategoryId: _selectedCategoryId,
-                                      selectedParentCategoryId:
-                                          _selectedParentCategoryId,
+                                      categoryPath: _selectedCategoryPath,
                                       searchQuery: _searchQuery,
                                       recentSales: recentSales,
                                       inventory: inventory,
@@ -248,18 +244,9 @@ class _SalesScreenState extends State<SalesScreen> {
                                           () => _searchQuery = value.trim(),
                                         );
                                       },
-                                      onParentCategorySelected:
-                                          (parentCategoryId) {
-                                            setState(() {
-                                              _selectedParentCategoryId =
-                                                  parentCategoryId;
-                                              _selectedCategoryId = null;
-                                            });
-                                          },
-                                      onCategorySelected: (categoryId) {
+                                      onCategoryPathChanged: (path) {
                                         setState(
-                                          () =>
-                                              _selectedCategoryId = categoryId,
+                                          () => _selectedCategoryPath = path,
                                         );
                                       },
                                       onAddToCart: _addProductToCart,
@@ -313,9 +300,7 @@ class _SalesScreenState extends State<SalesScreen> {
                                 isTablet: isTablet,
                                 products: filteredProducts,
                                 categories: categories,
-                                selectedCategoryId: _selectedCategoryId,
-                                selectedParentCategoryId:
-                                    _selectedParentCategoryId,
+                                categoryPath: _selectedCategoryPath,
                                 searchQuery: _searchQuery,
                                 recentSales: recentSales,
                                 inventory: inventory,
@@ -323,16 +308,9 @@ class _SalesScreenState extends State<SalesScreen> {
                                 onSearchChanged: (value) {
                                   setState(() => _searchQuery = value.trim());
                                 },
-                                onParentCategorySelected: (parentCategoryId) {
-                                  setState(() {
-                                    _selectedParentCategoryId =
-                                        parentCategoryId;
-                                    _selectedCategoryId = null;
-                                  });
-                                },
-                                onCategorySelected: (categoryId) {
+                                onCategoryPathChanged: (path) {
                                   setState(
-                                    () => _selectedCategoryId = categoryId,
+                                    () => _selectedCategoryPath = path,
                                   );
                                 },
                                 onAddToCart: _addProductToCart,
@@ -383,20 +361,24 @@ class _SalesScreenState extends State<SalesScreen> {
       return collected;
     }
 
-    final activeParentScope = _selectedParentCategoryId == null
+    // Dernier maillon du chemin sélectionné = catégorie active (à n'importe quel niveau).
+    final selectedCategoryId = _selectedCategoryPath.isEmpty
+        ? null
+        : _selectedCategoryPath.last;
+    // Un produit correspond s'il appartient à la catégorie active OU à l'une de ses
+    // descendantes, quel que soit le niveau de profondeur.
+    final activeCategoryScope = selectedCategoryId == null
         ? const <String>{}
-        : collectScope(_selectedParentCategoryId!);
+        : collectScope(selectedCategoryId);
 
     return products.where((product) {
       // Convertit la requête en minuscules pour comparaison insensible à la casse
       final query = _searchQuery.toLowerCase();
       // Vérifie si la catégorie du produit correspond à la catégorie sélectionnée
       // (ou si aucune catégorie n'est sélectionnée, tous les produits passent ce filtre)
-      final categoryMatches = _selectedCategoryId != null
-          ? product.categoryId == _selectedCategoryId
-          : _selectedParentCategoryId != null
-          ? activeParentScope.contains(product.categoryId)
-          : true;
+      final categoryMatches = selectedCategoryId == null
+          ? true
+          : activeCategoryScope.contains(product.categoryId);
       // Vérifie si le produit correspond à la requête de recherche
       // Recherche dans le nom, le code-barres et la description
       final queryMatches =
@@ -1993,33 +1975,30 @@ class _BottomQtyButton extends StatelessWidget {
 /// Affiche les produits en grille, permet recherche textuelle et filtrage par catégorie
 /// Responsive: colonnes variables selon la taille d'écran (tablet/desktop/mobile)
 /// Support des aperçus d'achats récents en bas
+/////////////////////////////////////////////////////////////////////////////////////////
 class _CatalogPanel extends StatelessWidget {
   final List<Product> products;
   final List<Category> categories;
-  final String? selectedCategoryId;
-  final String? selectedParentCategoryId;
+  final List<String> categoryPath;
   final String searchQuery;
   final List<StockMovement> recentSales;
   final InventoryProvider inventory;
   final bool isTablet;
   final bool compact;
   final ValueChanged<String> onSearchChanged;
-  final ValueChanged<String?> onParentCategorySelected;
-  final ValueChanged<String?> onCategorySelected;
+  final ValueChanged<List<String>> onCategoryPathChanged;
   final ValueChanged<Product> onAddToCart;
 
   const _CatalogPanel({
     required this.products,
     required this.categories,
-    required this.selectedCategoryId,
-    required this.selectedParentCategoryId,
+    required this.categoryPath,
     required this.searchQuery,
     required this.recentSales,
     required this.inventory,
     required this.isTablet,
     required this.onSearchChanged,
-    required this.onParentCategorySelected,
-    required this.onCategorySelected,
+    required this.onCategoryPathChanged,
     required this.onAddToCart,
     this.compact = false,
   });
@@ -2058,13 +2037,11 @@ class _CatalogPanel extends StatelessWidget {
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         _CatalogToolbar(
-          selectedCategoryId: selectedCategoryId,
-          selectedParentCategoryId: selectedParentCategoryId,
+          categoryPath: categoryPath,
           categories: categories,
           productsCount: products.length,
           onSearchChanged: onSearchChanged,
-          onParentCategorySelected: onParentCategorySelected,
-          onCategorySelected: onCategorySelected,
+          onCategoryPathChanged: onCategoryPathChanged,
         ),
         const SizedBox(height: 16),
         _ProductGrid(
@@ -2092,43 +2069,96 @@ class _CatalogPanel extends StatelessWidget {
 
 /// Barre d'outils du catalogue: recherche textuelle et filtres par catégorie
 /// Affiche recherche, compteur de produits, et chips de sélection de catégories
+/// Génère une rangée de chips par niveau de profondeur (racine, sous-catégorie,
+/// sous-sous-catégorie, ...) tant que le niveau sélectionné a des enfants, ce qui
+/// permet de naviguer sur un nombre illimité de niveaux de catégories.
 class _CatalogToolbar extends StatelessWidget {
-  final String? selectedCategoryId;
-  final String? selectedParentCategoryId;
+  final List<String> categoryPath;
   final List<Category> categories;
   final int productsCount;
   final ValueChanged<String> onSearchChanged;
-  final ValueChanged<String?> onParentCategorySelected;
-  final ValueChanged<String?> onCategorySelected;
+  final ValueChanged<List<String>> onCategoryPathChanged;
 
   const _CatalogToolbar({
-    required this.selectedCategoryId,
-    required this.selectedParentCategoryId,
+    required this.categoryPath,
     required this.categories,
     required this.productsCount,
     required this.onSearchChanged,
-    required this.onParentCategorySelected,
-    required this.onCategorySelected,
+    required this.onCategoryPathChanged,
   });
 
   @override
   Widget build(BuildContext context) {
-    final parentCategories = categories
-        .where((category) => category.parentId == null)
-        .toList();
+    // Regroupe les catégories par parent (null = racines) pour construire
+    // chaque niveau de navigation à la volée, quelle que soit la profondeur.
+    final categoriesByParent = <String?, List<Category>>{};
+    for (final category in categories) {
+      categoriesByParent
+          .putIfAbsent(category.parentId, () => <Category>[])
+          .add(category);
+    }
 
-    final subCategories = selectedParentCategoryId == null
-        ? const <Category>[]
-        : categories
-              .where(
-                (category) => category.parentId == selectedParentCategoryId,
-              )
-              .toList();
+    final categoriesById = <String, Category>{
+      for (final c in categories) c.id: c,
+    };
 
-    final parentById = <String, Category>{for (final c in categories) c.id: c};
-    final selectedParentName = selectedParentCategoryId == null
-        ? ''
-        : (parentById[selectedParentCategoryId!]?.name ?? 'Parent');
+    final levelRows = <Widget>[];
+    String? currentParentId;
+
+    for (var level = 0; ; level++) {
+      final levelCategories =
+          categoriesByParent[currentParentId] ?? const <Category>[];
+      if (levelCategories.isEmpty) {
+        break;
+      }
+
+      final selectedAtLevel = level < categoryPath.length
+          ? categoryPath[level]
+          : null;
+      final allChipLabel = level == 0
+          ? 'Tous'
+          : 'Tous ${categoriesById[categoryPath[level - 1]]?.name ?? ''}';
+
+      levelRows.add(
+        Padding(
+          padding: EdgeInsets.only(top: level == 0 ? 0 : 10),
+          child: SingleChildScrollView(
+            scrollDirection: Axis.horizontal,
+            child: Row(
+              children: [
+                Padding(
+                  padding: const EdgeInsets.only(right: 8),
+                  child: ChoiceChip(
+                    label: Text(allChipLabel),
+                    selected: selectedAtLevel == null,
+                    onSelected: (_) =>
+                        onCategoryPathChanged(categoryPath.sublist(0, level)),
+                  ),
+                ),
+                ...levelCategories.map(
+                  (category) => Padding(
+                    padding: const EdgeInsets.only(right: 8),
+                    child: ChoiceChip(
+                      label: Text(category.name),
+                      selected: selectedAtLevel == category.id,
+                      onSelected: (_) => onCategoryPathChanged([
+                        ...categoryPath.sublist(0, level),
+                        category.id,
+                      ]),
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+      );
+
+      if (selectedAtLevel == null) {
+        break;
+      }
+      currentParentId = selectedAtLevel;
+    }
 
     return Container(
       width: double.infinity,
@@ -2210,69 +2240,9 @@ class _CatalogToolbar extends StatelessWidget {
             ),
           ),
           const SizedBox(height: 14),
-          // Chips de filtrage par categories parents.
-          SingleChildScrollView(
-            scrollDirection: Axis.horizontal,
-            child: Row(
-              children: [
-                // Chip "Tous" pour afficher toutes les catégories
-                Padding(
-                  padding: const EdgeInsets.only(right: 8),
-                  child: ChoiceChip(
-                    label: const Text('Tous'),
-                    selected:
-                        selectedParentCategoryId == null &&
-                        selectedCategoryId == null,
-                    onSelected: (_) {
-                      onParentCategorySelected(null);
-                      onCategorySelected(null);
-                    },
-                  ),
-                ),
-                ...parentCategories.map(
-                  (category) => Padding(
-                    padding: const EdgeInsets.only(right: 8),
-                    child: ChoiceChip(
-                      label: Text(category.name),
-                      selected: selectedParentCategoryId == category.id,
-                      onSelected: (_) {
-                        onParentCategorySelected(category.id);
-                        onCategorySelected(null);
-                      },
-                    ),
-                  ),
-                ),
-              ],
-            ),
-          ),
-          if (selectedParentCategoryId != null && subCategories.isNotEmpty) ...[
-            const SizedBox(height: 10),
-            SingleChildScrollView(
-              scrollDirection: Axis.horizontal,
-              child: Row(
-                children: [
-                  Padding(
-                    padding: const EdgeInsets.only(right: 8),
-                    child: ChoiceChip(
-                      label: Text('Tous $selectedParentName'),
-                      selected: selectedCategoryId == null,
-                      onSelected: (_) => onCategorySelected(null),
-                    ),
-                  ),
-                  ...subCategories.map(
-                    (subcategory) => Padding(
-                      padding: const EdgeInsets.only(right: 8),
-                      child: ChoiceChip(
-                        label: Text(subcategory.name),
-                        selected: selectedCategoryId == subcategory.id,
-                        onSelected: (_) => onCategorySelected(subcategory.id),
-                      ),
-                    ),
-                  ),
-                ],
-              ),
-            ),
-          ],
+          // Une rangée de chips par niveau de catégories (racine, puis chaque
+          // niveau de sous-catégories tant qu'il y a des enfants à afficher).
+          ...levelRows,
         ],
       ),
     );
