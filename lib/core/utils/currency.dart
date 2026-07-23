@@ -63,3 +63,74 @@ double? convertAmount({
 
   return null;
 }
+
+double _round2(double value) => double.parse(value.toStringAsFixed(2));
+
+/// Resultat du calcul de taxe: montants deja arrondis a 2 decimales et
+/// exprimes dans la devise de paiement du ticket.
+class TaxCalculationResult {
+  final double subtotal;
+  final double taxAmount;
+  final double total;
+
+  const TaxCalculationResult({
+    required this.subtotal,
+    required this.taxAmount,
+    required this.total,
+  });
+}
+
+/// Calcule la taxe configurable sur [subtotal] (deja exprime dans
+/// [paymentCurrency]). Retourne null si une conversion de devise est requise
+/// (taxe a montant fixe dans une devise differente du paiement) mais qu'aucun
+/// taux de change n'est configure — meme convention que [convertAmount].
+///
+/// Utilisee a la fois pour l'apercu panier cote client et, pour les
+/// services, comme calcul faisant autorite avant insertion (ServiceOrderService).
+TaxCalculationResult? calculateTax({
+  required double subtotal,
+  required bool taxEnabled,
+  required String taxType,
+  required double taxValue,
+  String? taxCurrency,
+  required String paymentCurrency,
+  double? usdToHtgRate,
+}) {
+  final normalizedPayment = normalizeCurrencyCode(paymentCurrency);
+  final subtotalRounded = _round2(subtotal);
+
+  if (!taxEnabled) {
+    return TaxCalculationResult(
+      subtotal: subtotalRounded,
+      taxAmount: 0,
+      total: subtotalRounded,
+    );
+  }
+
+  double rawTax;
+  if (taxType == 'fixed') {
+    final normalizedTaxCurrency = normalizeCurrencyCode(
+      taxCurrency ?? normalizedPayment,
+    );
+    final converted = convertAmount(
+      amount: taxValue,
+      fromCurrency: normalizedTaxCurrency,
+      toCurrency: normalizedPayment,
+      usdToHtgRate: usdToHtgRate,
+    );
+    if (converted == null) {
+      return null;
+    }
+    rawTax = converted;
+  } else {
+    rawTax = subtotal * taxValue / 100;
+  }
+
+  final taxAmount = _round2(rawTax);
+  final total = _round2(subtotalRounded + taxAmount);
+  return TaxCalculationResult(
+    subtotal: subtotalRounded,
+    taxAmount: taxAmount,
+    total: total,
+  );
+}

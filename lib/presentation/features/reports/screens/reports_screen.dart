@@ -7,6 +7,7 @@ import '../../../../data/models/service_order_model.dart';
 import '../../../../data/models/stock_movement_model.dart';
 import '../../../../data/models/user_profile_model.dart';
 import '../../../../data/providers/inventory_provider.dart';
+import '../../../../services/sales/sales_service.dart';
 import '../../../../services/service_orders/service_order_service.dart';
 import '../../../../services/user/user_profile_service.dart';
 import '../../../common_widgets/app_drawer.dart';
@@ -21,6 +22,7 @@ class ReportsScreen extends StatefulWidget {
 
 class _ReportsScreenState extends State<ReportsScreen> {
   final ServiceOrderService _serviceOrderService = ServiceOrderService();
+  final SalesService _salesService = SalesService();
   final UserProfileService _userProfileService = UserProfileService();
 
   bool _isClientsLoading = false;
@@ -31,11 +33,68 @@ class _ReportsScreenState extends State<ReportsScreen> {
   String? _sellersError;
   List<UserProfile> _companyUsers = const <UserProfile>[];
 
+  bool _isSalesTaxLoading = false;
+  String? _salesTaxError;
+  Map<String, SalesTaxTotals> _salesTaxTotals = const <String, SalesTaxTotals>{};
+
   @override
   void initState() {
     super.initState();
     _loadClientSummary();
     _loadCompanyUsers();
+    _loadSalesTaxTotals();
+  }
+
+  /// Charge et fusionne les totaux ventes produits (`sales`) + ventes
+  /// services (`service_orders`) par devise, pour le bloc "Ventes & taxes".
+  /// Ne compte que les ventes creees apres la migration taxe : l'historique
+  /// anterieur (stock_movements sans sale_id) n'est pas retro-calcule.
+  Future<void> _loadSalesTaxTotals() async {
+    setState(() {
+      _isSalesTaxLoading = true;
+      _salesTaxError = null;
+    });
+
+    try {
+      final companyId = context.read<InventoryProvider>().companyId;
+      if (companyId == null || companyId.isEmpty) {
+        setState(() => _salesTaxTotals = const <String, SalesTaxTotals>{});
+        return;
+      }
+
+      final results = await Future.wait([
+        _salesService.fetchSalesTotals(companyId),
+        _serviceOrderService.fetchServiceOrdersTotals(companyId),
+      ]);
+
+      if (!mounted) {
+        return;
+      }
+
+      final merged = <String, SalesTaxTotals>{};
+      for (final totals in results) {
+        for (final entry in totals.entries) {
+          merged.update(
+            entry.key,
+            (value) => value + entry.value,
+            ifAbsent: () => entry.value,
+          );
+        }
+      }
+
+      setState(() => _salesTaxTotals = merged);
+    } catch (e) {
+      if (!mounted) {
+        return;
+      }
+      setState(
+        () => _salesTaxError = e.toString().replaceFirst('Exception: ', ''),
+      );
+    } finally {
+      if (mounted) {
+        setState(() => _isSalesTaxLoading = false);
+      }
+    }
   }
 
   Future<void> _loadClientSummary() async {
@@ -304,6 +363,77 @@ class _ReportsScreenState extends State<ReportsScreen> {
                           ),
                         ],
                       ),
+                      const SizedBox(height: 20),
+                      Text(
+                        'Ventes & taxes',
+                        style: Theme.of(context).textTheme.titleLarge?.copyWith(
+                          fontWeight: FontWeight.w800,
+                        ),
+                      ),
+                      const SizedBox(height: 10),
+                      if (_isSalesTaxLoading)
+                        const Padding(
+                          padding: EdgeInsets.symmetric(vertical: 10),
+                          child: Center(child: CircularProgressIndicator()),
+                        )
+                      else if (_salesTaxError != null)
+                        Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              _salesTaxError!,
+                              style: TextStyle(color: colorScheme.error),
+                            ),
+                            const SizedBox(height: 10),
+                            OutlinedButton.icon(
+                              onPressed: _loadSalesTaxTotals,
+                              icon: const Icon(Icons.refresh),
+                              label: const Text('Reessayer'),
+                            ),
+                          ],
+                        )
+                      else
+                        Wrap(
+                          spacing: 12,
+                          runSpacing: 12,
+                          children: [
+                            _ReportCard(
+                              title: 'Total des ventes',
+                              value: _salesTaxTotals.values
+                                  .fold<int>(0, (sum, t) => sum + t.count)
+                                  .toString(),
+                              icon: Icons.point_of_sale,
+                              color: const Color(0xFF0C7EA5),
+                            ),
+                            _ReportCard(
+                              title: 'Taxes collectees',
+                              value: formatMoneyByCurrency({
+                                for (final entry in _salesTaxTotals.entries)
+                                  entry.key: entry.value.taxAmount,
+                              }),
+                              icon: Icons.receipt_long,
+                              color: const Color(0xFFDC2626),
+                            ),
+                            _ReportCard(
+                              title: 'CA hors taxe',
+                              value: formatMoneyByCurrency({
+                                for (final entry in _salesTaxTotals.entries)
+                                  entry.key: entry.value.subtotal,
+                              }),
+                              icon: Icons.trending_up,
+                              color: const Color(0xFF15803D),
+                            ),
+                            _ReportCard(
+                              title: 'CA TTC',
+                              value: formatMoneyByCurrency({
+                                for (final entry in _salesTaxTotals.entries)
+                                  entry.key: entry.value.total,
+                              }),
+                              icon: Icons.payments,
+                              color: const Color(0xFF2563EB),
+                            ),
+                          ],
+                        ),
                       const SizedBox(height: 20),
                       Text(
                         'Produits en alerte de stock (${lowStock.length})',

@@ -1,6 +1,7 @@
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 import '../../data/models/company_model.dart';
+import '../../data/models/tax_config_model.dart';
 
 class CompanyService {
   SupabaseClient get _client => Supabase.instance.client;
@@ -108,6 +109,28 @@ class CompanyService {
     await _client
         .from('companies')
         .update({'usd_to_htg_rate': rate})
+        .eq('id', companyId);
+  }
+
+  // Configuration de taxe/frais (section "Taxes et frais" des parametres).
+  Future<TaxConfig> fetchTaxConfig(String companyId) async {
+    final row = await _client
+        .from('companies')
+        .select('tax_enabled, tax_name, tax_type, tax_value, tax_currency')
+        .eq('id', companyId)
+        .maybeSingle();
+
+    if (row == null) {
+      return TaxConfig.disabled;
+    }
+    return TaxConfig.fromJson(row);
+  }
+
+  // Reserve aux managers cote RLS (policy companies_update_own_manager_active).
+  Future<void> updateTaxConfig(String companyId, TaxConfig config) async {
+    await _client
+        .from('companies')
+        .update(config.toJson())
         .eq('id', companyId);
   }
 }

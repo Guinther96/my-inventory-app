@@ -8,13 +8,16 @@ import 'package:provider/provider.dart';
 import '../../../../core/utils/currency.dart';
 import '../../../../data/models/category_model.dart';
 import '../../../../data/models/product_model.dart';
+import '../../../../data/models/sale_model.dart';
 import '../../../../data/models/stock_movement_model.dart';
+import '../../../../data/models/tax_config_model.dart';
 
 // Imports du provider de gestion d'inventaire
 import '../../../../data/providers/inventory_provider.dart';
 import '../../../../services/company/company_service.dart';
 import '../../../../services/features/feature_service.dart';
 import '../../../../services/printer/printer_service.dart';
+import '../../../../services/sales/sales_service.dart';
 
 // Imports des widgets communs (barre latérale, drawer)
 import '../../../common_widgets/app_drawer.dart';
@@ -71,10 +74,15 @@ class _SalesScreenState extends State<SalesScreen> {
   double? _exchangeRate;
   bool _isLoadingRate = true;
 
+  /// Configuration de taxe de l'entreprise, chargee une fois. Sert a
+  /// l'apercu panier ; le montant persiste fait toujours autorite cote RPC.
+  TaxConfig _taxConfig = TaxConfig.disabled;
+
   @override
   void initState() {
     super.initState();
     _loadExchangeRate();
+    _loadTaxConfig();
   }
 
   Future<void> _loadExchangeRate() async {
@@ -96,6 +104,23 @@ class _SalesScreenState extends State<SalesScreen> {
       if (mounted) {
         setState(() => _isLoadingRate = false);
       }
+    }
+  }
+
+  Future<void> _loadTaxConfig() async {
+    final companyId = context.read<InventoryProvider>().companyId;
+    if (companyId == null || companyId.isEmpty) {
+      return;
+    }
+
+    try {
+      final config = await CompanyService().fetchTaxConfig(companyId);
+      if (mounted) {
+        setState(() => _taxConfig = config);
+      }
+    } catch (_) {
+      // Apercu uniquement : en cas d'echec, la caisse continue sans apercu
+      // de taxe, le RPC de checkout reste seul juge du montant final.
     }
   }
 
@@ -274,8 +299,27 @@ class _SalesScreenState extends State<SalesScreen> {
                   cartTotalsByCurrency,
                   paymentCurrency,
                 );
+                // Apercu de la taxe configurable sur le sous-total converti.
+                // Retourne null si la taxe necessite une conversion de
+                // devise mais qu'aucun taux n'est configure — dans ce cas
+                // on bloque l'encaissement comme pour une conversion produit
+                // manquante, plutot que d'encaisser silencieusement sans
+                // taxe.
+                final taxPreview = convertedTotal == null
+                    ? null
+                    : calculateTax(
+                        subtotal: convertedTotal,
+                        taxEnabled: _taxConfig.enabled,
+                        taxType: _taxConfig.type,
+                        taxValue: _taxConfig.value,
+                        taxCurrency: _taxConfig.currency,
+                        paymentCurrency: paymentCurrency,
+                        usdToHtgRate: _exchangeRate,
+                      );
                 final conversionBlocked =
-                    cartEntries.isNotEmpty && convertedTotal == null;
+                    cartEntries.isNotEmpty &&
+                    (convertedTotal == null ||
+                        (_taxConfig.enabled && taxPreview == null));
                 // Calcule le chiffre d'affaires du jour, regroupe par devise
                 // (privilegie le prix/devise figes sur la vente si presents).
                 final todayRevenueByCurrency = <String, double>{};
@@ -324,6 +368,8 @@ class _SalesScreenState extends State<SalesScreen> {
                                       cartTotalsByCurrency: cartTotalsByCurrency,
                                       paymentCurrency: paymentCurrency,
                                       convertedTotal: convertedTotal,
+                                      taxPreview: taxPreview,
+                                      taxConfig: _taxConfig,
                                       conversionBlocked: conversionBlocked,
                                       isLoadingRate: _isLoadingRate,
                                       onPaymentCurrencyChanged: (value) =>
@@ -405,6 +451,8 @@ class _SalesScreenState extends State<SalesScreen> {
                                   cartTotalsByCurrency: cartTotalsByCurrency,
                                   paymentCurrency: paymentCurrency,
                                   convertedTotal: convertedTotal,
+                                  taxPreview: taxPreview,
+                                  taxConfig: _taxConfig,
                                   conversionBlocked: conversionBlocked,
                                   isLoadingRate: _isLoadingRate,
                                   onPaymentCurrencyChanged: (value) => setState(
@@ -749,6 +797,14 @@ class _SalesScreenState extends State<SalesScreen> {
       return;
     }
 
+    final companyId = inventory.companyId;
+    if (companyId == null || companyId.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Entreprise introuvable.')),
+      );
+      return;
+    }
+
     // Valide que chaque produit a suffisamment de stock
     final validationError = _validateCart(inventory);
     if (validationError != null) {
@@ -769,23 +825,29 @@ class _SalesScreenState extends State<SalesScreen> {
       // Crée une copie des lignes de panier pour itération
       final checkoutLines = _cartLines.values.toList();
 
-      // Enregistre chaque article comme mouvement de stock 'exit'
-      for (final line in checkoutLines) {
-        await inventory.addStockMovement(
-          productId: line.productId,
-          movementType: 'exit',
-          quantity: line.quantity,
-          notes: note.isEmpty ? 'Vente caisse' : note,
-          paymentCurrency: paymentCurrency,
-        );
-      }
-
-      await _tryPrintSaleReceipt(
-        context,
-        inventory,
-        checkoutLines,
-        paymentCurrency,
+      // Encaisse tout le panier en une seule transaction serveur: le RPC
+      // recalcule prix/devise/taxe depuis la base (jamais confiance au
+      // client) et cree l'en-tete de vente + les lignes + les mouvements de
+      // stock correspondants.
+      final sale = await SalesService().checkoutCart(
+        companyId: companyId,
+        items: checkoutLines
+            .map(
+              (line) => CartItemInput(
+                productId: line.productId,
+                quantity: line.quantity,
+              ),
+            )
+            .toList(),
+        paymentCurrency: paymentCurrency,
+        notes: note.isEmpty ? 'Vente caisse' : note,
       );
+
+      // Rafraichit le stock/l'historique local depuis le serveur (le RPC a
+      // deja tout persiste ; le panier ne recalcule rien lui-meme).
+      await inventory.initialize(forceRefresh: true);
+
+      await _tryPrintSaleReceipt(context, inventory, sale);
 
       // Vérifie que le contexte est toujours valide après les appels async
       if (!context.mounted) {
@@ -825,8 +887,7 @@ class _SalesScreenState extends State<SalesScreen> {
   Future<void> _tryPrintSaleReceipt(
     BuildContext context,
     InventoryProvider inventory,
-    List<_CartLine> checkoutLines,
-    String paymentCurrency,
+    Sale sale,
   ) async {
     if (!FeatureService.isEnabled('print')) {
       return;
@@ -845,48 +906,34 @@ class _SalesScreenState extends State<SalesScreen> {
         return;
       }
 
-      final items = <Map<String, dynamic>>[];
-      for (final line in checkoutLines) {
-        final product = inventory.findProductById(line.productId);
-        if (product == null) {
-          continue;
-        }
-
-        items.add(<String, dynamic>{
-          'name': product.name,
-          'quantity': line.quantity,
-          'price': product.price,
-          'currency': product.currency,
-        });
-      }
-
-      if (items.isEmpty) {
+      if (sale.items.isEmpty) {
         return;
       }
 
-      final totalsByCurrency = <String, double>{};
-      for (final item in items) {
-        final currency = normalizeCurrencyCode(item['currency'] as String?);
-        final lineTotal =
-            (item['quantity'] as int) * (item['price'] as double);
-        totalsByCurrency.update(
-          currency,
-          (value) => value + lineTotal,
-          ifAbsent: () => lineTotal,
-        );
-      }
-
-      final convertedTotal = _convertedGrandTotal(
-        totalsByCurrency,
-        paymentCurrency,
-      );
+      // Les montants du recu proviennent du RPC serveur (source de verite),
+      // jamais recalcules cote client.
+      final items = sale.items
+          .map(
+            (item) => <String, dynamic>{
+              'name': item.productName,
+              'quantity': item.quantity,
+              'price': item.unitPrice,
+              'currency': item.productCurrency,
+            },
+          )
+          .toList();
 
       await PrinterService.printSaleReceipt(
         companyName: inventory.companyName,
         companyEmail: inventory.companyEmail,
         items: items,
-        total: convertedTotal ?? 0,
-        paymentCurrency: paymentCurrency,
+        total: sale.totalAmount,
+        paymentCurrency: sale.paymentCurrency,
+        subtotal: sale.subtotalAmount,
+        taxName: sale.taxName,
+        taxAmount: sale.taxAmount,
+        taxIsPercentage: sale.isTaxPercentage,
+        taxRatePercent: sale.taxValue,
       );
     } catch (e, st) {
       debugPrint('Print sale receipt failed: $e');
@@ -1157,6 +1204,8 @@ class _TicketPanel extends StatelessWidget {
   final ValueChanged<int> onQuickAdd;
   final VoidCallback? onClear;
   final VoidCallback? onCheckout;
+  final TaxCalculationResult? taxPreview;
+  final TaxConfig taxConfig;
 
   const _TicketPanel({
     required this.entries,
@@ -1167,6 +1216,8 @@ class _TicketPanel extends StatelessWidget {
     required this.cartTotalsByCurrency,
     required this.paymentCurrency,
     required this.convertedTotal,
+    required this.taxPreview,
+    required this.taxConfig,
     required this.conversionBlocked,
     required this.isLoadingRate,
     required this.onPaymentCurrencyChanged,
@@ -1222,6 +1273,41 @@ class _TicketPanel extends StatelessWidget {
     }
 
     return SizedBox.expand(child: card);
+  }
+
+  /// Apercu Sous-total/Taxe au-dessus du "Total a encaisser", affiche
+  /// uniquement si la taxe est activee et calculable (sinon l'encaissement
+  /// est deja bloque par [conversionBlocked]).
+  List<Widget> _buildTaxPreviewRows(BuildContext context) {
+    final preview = taxPreview;
+    if (!taxConfig.enabled || preview == null || preview.taxAmount <= 0) {
+      return const <Widget>[];
+    }
+
+    final taxLabel = taxConfig.isPercentage
+        ? '${taxConfig.name} (${taxConfig.value.toStringAsFixed(0)}%)'
+        : taxConfig.name;
+
+    Widget row(String label, double amount) {
+      return Padding(
+        padding: const EdgeInsets.only(bottom: 6),
+        child: Row(
+          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+          children: [
+            Text(label, style: const TextStyle(color: Colors.white70)),
+            Text(
+              formatMoney(amount, paymentCurrency),
+              style: const TextStyle(color: Colors.white70),
+            ),
+          ],
+        ),
+      );
+    }
+
+    return <Widget>[
+      row('Sous-total', preview.subtotal),
+      row(taxLabel, preview.taxAmount),
+    ];
   }
 
   /// Construit les sections internes du panier (titre, liste, notes, boutons)
@@ -1382,6 +1468,7 @@ class _TicketPanel extends StatelessWidget {
                   child: Column(
                     mainAxisSize: MainAxisSize.min,
                     children: [
+                      ..._buildTaxPreviewRows(context),
                       Row(
                         mainAxisAlignment: MainAxisAlignment.spaceBetween,
                         children: [
@@ -1541,6 +1628,7 @@ class _TicketPanel extends StatelessWidget {
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
+            ..._buildTaxPreviewRows(context),
             Row(
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [

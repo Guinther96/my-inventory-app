@@ -2,6 +2,8 @@ import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:provider/provider.dart';
 
+import '../../../../core/utils/currency.dart';
+import '../../../../data/models/tax_config_model.dart';
 import '../../../../data/providers/inventory_provider.dart';
 import '../../../../data/providers/user_profile_provider.dart';
 import '../../../../services/auth/auth_service.dart';
@@ -129,6 +131,20 @@ class SettingsScreen extends StatelessWidget {
                         icon: Icons.currency_exchange,
                         iconColor: const Color(0xFFB45309),
                         child: _CurrencySettingsPanel(
+                          companyId: context
+                              .read<InventoryProvider>()
+                              .companyId,
+                        ),
+                      ),
+                    if (isManager) const SizedBox(height: 14),
+                    if (isManager)
+                      _SettingsBlock(
+                        title: 'Taxes et frais',
+                        description:
+                            'Activez et configurez une taxe (montant fixe ou pourcentage) appliquee automatiquement sur les ventes de produits et de services.',
+                        icon: Icons.receipt_long_outlined,
+                        iconColor: const Color(0xFFDC2626),
+                        child: _TaxSettingsPanel(
                           companyId: context
                               .read<InventoryProvider>()
                               .companyId,
@@ -525,6 +541,217 @@ class _CurrencySettingsPanelState extends State<_CurrencySettingsPanel> {
         const SizedBox(height: 10),
         FilledButton.icon(
           onPressed: _isSaving ? null : _saveRate,
+          icon: const Icon(Icons.save_outlined),
+          label: Text(_isSaving ? 'Enregistrement...' : 'Enregistrer'),
+        ),
+      ],
+    );
+  }
+}
+
+class _TaxSettingsPanel extends StatefulWidget {
+  final String? companyId;
+
+  const _TaxSettingsPanel({required this.companyId});
+
+  @override
+  State<_TaxSettingsPanel> createState() => _TaxSettingsPanelState();
+}
+
+class _TaxSettingsPanelState extends State<_TaxSettingsPanel> {
+  final CompanyService _companyService = CompanyService();
+  final TextEditingController _nameController = TextEditingController();
+  final TextEditingController _valueController = TextEditingController();
+
+  bool _isLoading = true;
+  bool _isSaving = false;
+  bool _enabled = false;
+  String _type = 'percentage';
+  String _currency = 'HTG';
+
+  @override
+  void initState() {
+    super.initState();
+    _loadConfig();
+  }
+
+  @override
+  void dispose() {
+    _nameController.dispose();
+    _valueController.dispose();
+    super.dispose();
+  }
+
+  Future<void> _loadConfig() async {
+    final companyId = widget.companyId;
+    if (companyId == null || companyId.isEmpty) {
+      setState(() => _isLoading = false);
+      return;
+    }
+
+    try {
+      final config = await _companyService.fetchTaxConfig(companyId);
+      _nameController.text = config.name;
+      _valueController.text = config.value.toStringAsFixed(2);
+      _enabled = config.enabled;
+      _type = config.type;
+      _currency = config.currency ?? 'HTG';
+    } catch (e, st) {
+      debugPrint('Load tax config failed: $e');
+      debugPrint('$st');
+    } finally {
+      if (mounted) {
+        setState(() => _isLoading = false);
+      }
+    }
+  }
+
+  Future<void> _saveConfig() async {
+    final companyId = widget.companyId;
+    if (companyId == null || companyId.isEmpty) {
+      _show('Entreprise introuvable.');
+      return;
+    }
+
+    final name = _nameController.text.trim();
+    if (name.isEmpty) {
+      _show('Entrez un nom de taxe.');
+      return;
+    }
+
+    final value = double.tryParse(
+      _valueController.text.trim().replaceAll(',', '.'),
+    );
+    if (value == null || value < 0 || (_type == 'percentage' && value > 100)) {
+      _show(
+        _type == 'percentage'
+            ? 'Entrez un pourcentage valide (0 a 100).'
+            : 'Entrez un montant valide (0 ou plus).',
+      );
+      return;
+    }
+
+    setState(() => _isSaving = true);
+    try {
+      await _companyService.updateTaxConfig(
+        companyId,
+        TaxConfig(
+          enabled: _enabled,
+          name: name,
+          type: _type,
+          value: value,
+          currency: _type == 'fixed' ? _currency : null,
+        ),
+      );
+      _show('Configuration de taxe enregistree.');
+    } catch (e, st) {
+      debugPrint('Save tax config failed: $e');
+      debugPrint('$st');
+      _show('Erreur lors de l enregistrement de la taxe.');
+    } finally {
+      if (mounted) {
+        setState(() => _isSaving = false);
+      }
+    }
+  }
+
+  void _show(String message) {
+    if (!mounted) {
+      return;
+    }
+    ScaffoldMessenger.of(
+      context,
+    ).showSnackBar(SnackBar(content: Text(message)));
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    if (_isLoading) {
+      return const Padding(
+        padding: EdgeInsets.symmetric(vertical: 6),
+        child: LinearProgressIndicator(minHeight: 2),
+      );
+    }
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        SwitchListTile(
+          contentPadding: EdgeInsets.zero,
+          title: const Text('Activer la taxe'),
+          value: _enabled,
+          onChanged: (value) => setState(() => _enabled = value),
+        ),
+        const SizedBox(height: 6),
+        TextField(
+          controller: _nameController,
+          decoration: const InputDecoration(
+            border: OutlineInputBorder(),
+            isDense: true,
+            labelText: 'Nom de la taxe',
+            hintText: 'Ex: Taxe, TVA, Redevance',
+          ),
+        ),
+        const SizedBox(height: 10),
+        Row(
+          children: [
+            Expanded(
+              child: SegmentedButton<String>(
+                segments: const [
+                  ButtonSegment(
+                    value: 'percentage',
+                    label: Text('Pourcentage'),
+                  ),
+                  ButtonSegment(value: 'fixed', label: Text('Montant fixe')),
+                ],
+                selected: {_type},
+                onSelectionChanged: (selection) {
+                  setState(() => _type = selection.first);
+                },
+              ),
+            ),
+          ],
+        ),
+        const SizedBox(height: 10),
+        Row(
+          crossAxisAlignment: CrossAxisAlignment.center,
+          children: [
+            Expanded(
+              child: TextField(
+                controller: _valueController,
+                keyboardType: const TextInputType.numberWithOptions(
+                  decimal: true,
+                ),
+                decoration: InputDecoration(
+                  border: const OutlineInputBorder(),
+                  isDense: true,
+                  labelText: 'Valeur',
+                  hintText: _type == 'percentage' ? 'Ex: 10' : 'Ex: 2.00',
+                  suffixText: _type == 'percentage' ? '%' : null,
+                ),
+              ),
+            ),
+            if (_type == 'fixed') ...[
+              const SizedBox(width: 10),
+              DropdownButton<String>(
+                value: _currency,
+                items: kSupportedCurrencies
+                    .map(
+                      (code) => DropdownMenuItem(value: code, child: Text(code)),
+                    )
+                    .toList(),
+                onChanged: (value) {
+                  if (value != null) {
+                    setState(() => _currency = value);
+                  }
+                },
+              ),
+            ],
+          ],
+        ),
+        const SizedBox(height: 10),
+        FilledButton.icon(
+          onPressed: _isSaving ? null : _saveConfig,
           icon: const Icon(Icons.save_outlined),
           label: Text(_isSaving ? 'Enregistrement...' : 'Enregistrer'),
         ),

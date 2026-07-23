@@ -9,6 +9,7 @@ import '../../data/models/service_model.dart';
 import '../../data/models/service_order_item_model.dart';
 import '../../data/models/service_order_model.dart';
 import '../company/company_service.dart';
+import '../sales/sales_service.dart';
 import 'reservation_service.dart';
 import 'service_order_printer_service.dart';
 
@@ -221,10 +222,17 @@ class ServiceOrderService {
       paymentCurrency ?? items.first.currency,
     );
 
-    final needsConversion = items.any(
-      (item) =>
-          normalizeCurrencyCode(item.currency) != resolvedPaymentCurrency,
-    );
+    final taxConfig = await _companyService.fetchTaxConfig(companyId);
+
+    final needsConversion =
+        items.any(
+          (item) =>
+              normalizeCurrencyCode(item.currency) != resolvedPaymentCurrency,
+        ) ||
+        (taxConfig.enabled &&
+            taxConfig.isFixed &&
+            normalizeCurrencyCode(taxConfig.currency) !=
+                resolvedPaymentCurrency);
 
     double? usdToHtgRate;
     if (needsConversion) {
@@ -257,7 +265,26 @@ class ServiceOrderService {
     }
 
     const discount = 0.0;
-    final total = subtotal - discount;
+
+    final taxResult = calculateTax(
+      subtotal: subtotal,
+      taxEnabled: taxConfig.enabled,
+      taxType: taxConfig.type,
+      taxValue: taxConfig.value,
+      taxCurrency: taxConfig.currency,
+      paymentCurrency: resolvedPaymentCurrency,
+      usdToHtgRate: usdToHtgRate,
+    );
+    if (taxResult == null) {
+      throw Exception(
+        'Taux de change requis pour appliquer la taxe. Configurez-le dans Parametres.',
+      );
+    }
+    final roundedSubtotal = taxResult.subtotal;
+    final taxAmount = taxResult.taxAmount;
+    final total = double.parse(
+      (roundedSubtotal - discount + taxAmount).toStringAsFixed(2),
+    );
 
     final now = DateTime.now();
     final ticketNumber = 'SRV-${DateFormat('yyyyMMdd-HHmmss').format(now)}';
@@ -274,8 +301,12 @@ class ServiceOrderService {
           'ticket_number': ticketNumber,
           'payment_method': paymentMethod,
           'payment_status': 'paid',
-          'subtotal_amount': subtotal,
+          'subtotal_amount': roundedSubtotal,
           'discount_amount': discount,
+          'tax_name': taxConfig.enabled ? taxConfig.name : null,
+          'tax_type': taxConfig.enabled ? taxConfig.type : null,
+          'tax_value': taxConfig.enabled ? taxConfig.value : null,
+          'tax_amount': taxAmount,
           'total_amount': total,
           'paid_amount': total,
           'payment_currency': resolvedPaymentCurrency,
@@ -389,6 +420,35 @@ class ServiceOrderService {
       notes: notes,
       reservationId: reservation.id,
     );
+  }
+
+  /// Ventes services de la company, pour les rapports. Agregation cote
+  /// client par devise, coherent avec le style de reports_screen.dart et de
+  /// SalesService.fetchSalesTotals (produits).
+  Future<Map<String, SalesTaxTotals>> fetchServiceOrdersTotals(
+    String companyId,
+  ) async {
+    final rows = await _client
+        .from('service_orders')
+        .select('subtotal_amount, tax_amount, total_amount, payment_currency')
+        .eq('company_id', companyId);
+
+    final totals = <String, SalesTaxTotals>{};
+    for (final row in (rows as List<dynamic>)) {
+      final map = Map<String, dynamic>.from(row as Map);
+      final currency = normalizeCurrencyCode(
+        map['payment_currency']?.toString(),
+      );
+      final entry = SalesTaxTotals(
+        count: 1,
+        subtotal:
+            double.tryParse(map['subtotal_amount']?.toString() ?? '') ?? 0,
+        taxAmount: double.tryParse(map['tax_amount']?.toString() ?? '') ?? 0,
+        total: double.tryParse(map['total_amount']?.toString() ?? '') ?? 0,
+      );
+      totals.update(currency, (value) => value + entry, ifAbsent: () => entry);
+    }
+    return totals;
   }
 
   Future<ServiceOrder> fetchOrderById(String orderId) async {

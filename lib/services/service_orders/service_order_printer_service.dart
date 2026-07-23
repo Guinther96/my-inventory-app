@@ -44,6 +44,11 @@ class ServiceOrderPrinterService {
         clientName: order.clientName,
         cashierName: order.cashierName,
         currency: order.paymentCurrency,
+        subtotal: order.subtotalAmount,
+        taxName: order.taxName,
+        taxAmount: order.taxAmount,
+        taxIsPercentage: order.isTaxPercentage,
+        taxRatePercent: order.taxValue,
       );
 
       debugPrint('Service order printed successfully: ${order.id}');

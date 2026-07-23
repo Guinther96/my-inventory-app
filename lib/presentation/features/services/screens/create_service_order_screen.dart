@@ -11,6 +11,7 @@ import '../../../../../data/models/reservation_model.dart';
 import '../../../../../data/models/service_model.dart';
 import '../../../../../data/models/service_order_item_model.dart';
 import '../../../../../data/models/service_order_model.dart';
+import '../../../../../data/models/tax_config_model.dart';
 import '../../../../../data/models/user_profile_model.dart';
 import '../../../../../data/providers/inventory_provider.dart';
 import '../../../../../services/company/company_service.dart';
@@ -45,6 +46,7 @@ class _CreateServiceOrderScreenState extends State<CreateServiceOrderScreen> {
   /// Devise de paiement choisie par le client pour le ticket courant.
   String? _selectedPaymentCurrency;
   double? _exchangeRate;
+  TaxConfig _taxConfig = TaxConfig.disabled;
 
   Client? _selectedClient;
   final TextEditingController _nameCtrl = TextEditingController();
@@ -79,6 +81,8 @@ class _CreateServiceOrderScreenState extends State<CreateServiceOrderScreen> {
         _userProfileService.fetchCompanyUsers(),
         if (companyId != null && companyId.isNotEmpty)
           CompanyService().fetchExchangeRate(companyId),
+        if (companyId != null && companyId.isNotEmpty)
+          CompanyService().fetchTaxConfig(companyId),
       ]);
 
       if (!mounted) {
@@ -90,7 +94,10 @@ class _CreateServiceOrderScreenState extends State<CreateServiceOrderScreen> {
       if (results.length > 3) {
         _exchangeRate = results[3] as double?;
       }
-      
+      if (results.length > 4) {
+        _taxConfig = results[4] as TaxConfig;
+      }
+
       // Filtrer seulement les prestataires
       final allUsers = results[2] as List<UserProfile>;
       _providers = allUsers.where((u) => u.role == AppRole.provider).toList();
@@ -193,6 +200,26 @@ class _CreateServiceOrderScreenState extends State<CreateServiceOrderScreen> {
     return total;
   }
 
+  /// Apercu Sous-total/Taxe/Total sur le sous-total converti. Null si la
+  /// taxe necessite une conversion de devise mais qu'aucun taux n'est
+  /// configure — dans ce cas la validation est bloquee, comme pour une
+  /// conversion de service manquante.
+  TaxCalculationResult? get _taxPreview {
+    final subtotal = _convertedTotal;
+    if (subtotal == null) {
+      return null;
+    }
+    return calculateTax(
+      subtotal: subtotal,
+      taxEnabled: _taxConfig.enabled,
+      taxType: _taxConfig.type,
+      taxValue: _taxConfig.value,
+      taxCurrency: _taxConfig.currency,
+      paymentCurrency: _paymentCurrency,
+      usdToHtgRate: _exchangeRate,
+    );
+  }
+
   Future<void> _submit() async {
     if (_lines.isEmpty) {
       _show('Ajoutez au moins un service.');
@@ -207,6 +234,13 @@ class _CreateServiceOrderScreenState extends State<CreateServiceOrderScreen> {
 
     if (_convertedTotal == null) {
       _show('Taux de change non configure. Configurez-le dans Parametres.');
+      return;
+    }
+
+    if (_taxConfig.enabled && _taxPreview == null) {
+      _show(
+        'Taux de change requis pour appliquer la taxe. Configurez-le dans Parametres.',
+      );
       return;
     }
 
@@ -312,6 +346,14 @@ class _CreateServiceOrderScreenState extends State<CreateServiceOrderScreen> {
                   ),
                 ),
                 const SizedBox(height: 8),
+                if (order.taxAmount > 0) ...[
+                  Text(
+                    'Sous-total: ${formatMoney(order.subtotalAmount, order.paymentCurrency)}',
+                  ),
+                  Text(
+                    '${order.isTaxPercentage ? '${order.taxName} (${order.taxValue?.toStringAsFixed(0)}%)' : order.taxName}: ${formatMoney(order.taxAmount, order.paymentCurrency)}',
+                  ),
+                ],
                 Text(
                   'Total: ${formatMoney(order.totalAmount, order.paymentCurrency)}',
                 ),
@@ -622,16 +664,51 @@ class _CreateServiceOrderScreenState extends State<CreateServiceOrderScreen> {
                                   }).toList(),
                                 ),
                               ],
-                              Text(
-                                _convertedTotal == null
-                                    ? 'Total: taux de change requis (configurez-le dans Parametres)'
-                                    : 'Total: ${formatMoney(_convertedTotal!, _paymentCurrency)}',
-                                style: Theme.of(context).textTheme.titleMedium,
+                              Builder(
+                                builder: (context) {
+                                  final preview = _taxPreview;
+                                  if (_convertedTotal != null &&
+                                      _taxConfig.enabled &&
+                                      preview != null &&
+                                      preview.taxAmount > 0) {
+                                    final taxLabel = _taxConfig.isPercentage
+                                        ? '${_taxConfig.name} (${_taxConfig.value.toStringAsFixed(0)}%)'
+                                        : _taxConfig.name;
+                                    return Column(
+                                      crossAxisAlignment:
+                                          CrossAxisAlignment.start,
+                                      children: [
+                                        Text(
+                                          'Sous-total: ${formatMoney(preview.subtotal, _paymentCurrency)}',
+                                        ),
+                                        Text(
+                                          '$taxLabel: ${formatMoney(preview.taxAmount, _paymentCurrency)}',
+                                        ),
+                                        const SizedBox(height: 4),
+                                        Text(
+                                          'Total: ${formatMoney(preview.total, _paymentCurrency)}',
+                                          style: Theme.of(
+                                            context,
+                                          ).textTheme.titleMedium,
+                                        ),
+                                      ],
+                                    );
+                                  }
+                                  return Text(
+                                    _convertedTotal == null
+                                        ? 'Total: taux de change requis (configurez-le dans Parametres)'
+                                        : 'Total: ${formatMoney(_convertedTotal!, _paymentCurrency)}',
+                                    style: Theme.of(context).textTheme.titleMedium,
+                                  );
+                                },
                               ),
                               const SizedBox(height: 8),
                               FilledButton.icon(
                                 onPressed:
-                                    _isSubmitting || _convertedTotal == null
+                                    _isSubmitting ||
+                                        _convertedTotal == null ||
+                                        (_taxConfig.enabled &&
+                                            _taxPreview == null)
                                     ? null
                                     : _submit,
                                 icon: const Icon(Icons.receipt_long),

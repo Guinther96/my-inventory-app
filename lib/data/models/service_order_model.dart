@@ -18,10 +18,16 @@ class ServiceOrder {
   final double paidAmount;
   final String paymentCurrency;
   final double? exchangeRate;
+  final String? taxName;
+  final String? taxType;
+  final double? taxValue;
+  final double taxAmount;
   final String? notes;
   final DateTime createdAt;
   final DateTime updatedAt;
   final List<ServiceOrderItem> items;
+
+  bool get isTaxPercentage => taxType == 'percentage';
 
   ServiceOrder({
     required this.id,
@@ -40,6 +46,10 @@ class ServiceOrder {
     required this.paidAmount,
     this.paymentCurrency = 'HTG',
     this.exchangeRate,
+    this.taxName,
+    this.taxType,
+    this.taxValue,
+    this.taxAmount = 0,
     this.notes,
     required this.createdAt,
     required this.updatedAt,
@@ -82,6 +92,10 @@ class ServiceOrder {
         json['payment_currency']?.toString(),
       ),
       exchangeRate: double.tryParse(json['exchange_rate']?.toString() ?? ''),
+      taxName: json['tax_name']?.toString(),
+      taxType: json['tax_type']?.toString(),
+      taxValue: double.tryParse(json['tax_value']?.toString() ?? ''),
+      taxAmount: double.tryParse(json['tax_amount']?.toString() ?? '') ?? 0,
       notes: json['notes']?.toString(),
       createdAt:
           DateTime.tryParse(createdAtRaw?.toString() ?? '') ?? DateTime.now(),
@@ -109,6 +123,10 @@ class ServiceOrder {
       'paid_amount': paidAmount,
       'payment_currency': paymentCurrency,
       if (exchangeRate != null) 'exchange_rate': exchangeRate,
+      'tax_name': taxName,
+      'tax_type': taxType,
+      'tax_value': taxValue,
+      'tax_amount': taxAmount,
       'notes': notes,
     };
   }

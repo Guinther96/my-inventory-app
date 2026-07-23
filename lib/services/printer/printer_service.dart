@@ -78,6 +78,11 @@ class PrinterService {
     required List<Map<String, dynamic>> items,
     required double total,
     String paymentCurrency = 'HTG',
+    double? subtotal,
+    String? taxName,
+    double? taxAmount,
+    bool taxIsPercentage = false,
+    double? taxRatePercent,
   }) async {
     final now = DateTime.now();
     final transactionId = 'SALE-${now.millisecondsSinceEpoch}';
@@ -107,8 +112,18 @@ class PrinterService {
       );
     }
 
+    lines.add(_separator());
+    lines.addAll(
+      _taxSummaryLines(
+        paymentCurrency: paymentCurrency,
+        subtotal: subtotal,
+        taxName: taxName,
+        taxAmount: taxAmount,
+        taxIsPercentage: taxIsPercentage,
+        taxRatePercent: taxRatePercent,
+      ),
+    );
     lines.addAll(<String>[
-      _separator(),
       'Total ($paymentCurrency): ${formatCurrency(total, paymentCurrency)}',
       _separator(),
     ]);
@@ -120,6 +135,31 @@ class PrinterService {
     );
   }
 
+  /// Lignes "Sous-total"/"Taxe" affichees avant le total, uniquement si une
+  /// taxe (montant > 0) a ete appliquee. Vide et sans effet sinon, pour
+  /// rester retrocompatible avec les recus sans taxe.
+  static List<String> _taxSummaryLines({
+    required String paymentCurrency,
+    double? subtotal,
+    String? taxName,
+    double? taxAmount,
+    bool taxIsPercentage = false,
+    double? taxRatePercent,
+  }) {
+    if (taxAmount == null || taxAmount <= 0 || subtotal == null) {
+      return const <String>[];
+    }
+
+    final label = taxIsPercentage && taxRatePercent != null
+        ? '${taxName ?? 'Taxe'} (${taxRatePercent.toStringAsFixed(0)}%)'
+        : (taxName ?? 'Taxe');
+
+    return <String>[
+      'Sous-total: ${formatCurrency(subtotal, paymentCurrency)}',
+      '$label: ${formatCurrency(taxAmount, paymentCurrency)}',
+    ];
+  }
+
   static Future<void> printServiceReceipt({
     required String companyName,
     String? companyEmail,
@@ -128,9 +168,22 @@ class PrinterService {
     required String clientName,
     String? cashierName,
     String currency = 'HTG',
+    double? subtotal,
+    String? taxName,
+    double? taxAmount,
+    bool taxIsPercentage = false,
+    double? taxRatePercent,
   }) async {
     final now = DateTime.now();
     final transactionId = 'SRV-${now.millisecondsSinceEpoch}';
+    final taxLines = _taxSummaryLines(
+      paymentCurrency: currency,
+      subtotal: subtotal,
+      taxName: taxName,
+      taxAmount: taxAmount,
+      taxIsPercentage: taxIsPercentage,
+      taxRatePercent: taxRatePercent,
+    );
 
     final lines = <String>[
       _center('[SAAS POS]'),
@@ -144,7 +197,10 @@ class PrinterService {
       if (cashierName != null && cashierName.isNotEmpty)
         'Vendeur: ${_truncate(cashierName)}',
       'Service: ${_truncate(serviceName)}',
-      'Prix: ${formatCurrency(price, currency)}',
+      ...taxLines,
+      taxLines.isEmpty
+          ? 'Prix: ${formatCurrency(price, currency)}'
+          : 'Total: ${formatCurrency(price, currency)}',
       _separator(),
     ];
 
