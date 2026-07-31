@@ -9,12 +9,18 @@ import '../../data/models/sale_model.dart';
 class CartItemInput {
   final String productId;
   final int quantity;
+  final String? variantId;
 
-  const CartItemInput({required this.productId, required this.quantity});
+  const CartItemInput({
+    required this.productId,
+    required this.quantity,
+    this.variantId,
+  });
 
   Map<String, dynamic> toJson() => {
     'product_id': productId,
     'quantity': quantity,
+    if (variantId != null) 'variant_id': variantId,
   };
 }
 

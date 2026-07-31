@@ -4,6 +4,8 @@ class SaleItem {
   final String id;
   final String saleId;
   final String? productId;
+  final String? variantId;
+  final String? variantLabel;
   final String productName;
   final int quantity;
   final double unitPrice;
@@ -16,6 +18,8 @@ class SaleItem {
     required this.id,
     required this.saleId,
     this.productId,
+    this.variantId,
+    this.variantLabel,
     required this.productName,
     required this.quantity,
     required this.unitPrice,
@@ -32,6 +36,8 @@ class SaleItem {
       id: json['id']?.toString() ?? '',
       saleId: json['sale_id']?.toString() ?? '',
       productId: json['product_id']?.toString(),
+      variantId: json['variant_id']?.toString(),
+      variantLabel: json['variant_label']?.toString(),
       productName: json['product_name']?.toString() ?? '',
       quantity: int.tryParse(json['quantity']?.toString() ?? '') ?? 1,
       unitPrice: double.tryParse(json['unit_price']?.toString() ?? '') ?? 0,
@@ -50,6 +56,8 @@ class SaleItem {
       if (id.isNotEmpty) 'id': id,
       'sale_id': saleId,
       'product_id': productId,
+      if (variantId != null) 'variant_id': variantId,
+      if (variantLabel != null) 'variant_label': variantLabel,
       'product_name': productName,
       'quantity': quantity,
       'unit_price': unitPrice,

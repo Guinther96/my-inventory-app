@@ -7,6 +7,8 @@ import 'package:provider/provider.dart';
 
 import '../../../../core/utils/currency.dart';
 import '../../../../data/models/product_model.dart';
+import '../../../../data/models/product_variant.dart';
+import '../../../../data/models/variant_attribute.dart';
 import '../../../../data/providers/inventory_provider.dart';
 import '../../../common_widgets/app_drawer.dart';
 import '../../../common_widgets/app_sidebar.dart';
@@ -422,6 +424,15 @@ class _ProductsScreenState extends State<ProductsScreen> {
                             setDialogState(() => selectedCategoryId = value);
                           },
                         ),
+                        if (product != null) ...[
+                          const SizedBox(height: 20),
+                          const Divider(),
+                          const SizedBox(height: 8),
+                          _VariantsSection(
+                            productId: product.id,
+                            currency: selectedCurrency,
+                          ),
+                        ],
                         const SizedBox(height: 20),
                         Align(
                           alignment: Alignment.centerRight,
@@ -717,4 +728,406 @@ class _ProductImage extends StatelessWidget {
       ),
     );
   }
+}
+
+/// Section "Variantes" du dialogue produit: liste les variantes existantes
+/// (options universelles: couleur/taille, barbier/duree, longueur/technique...)
+/// et permet d'en ajouter/modifier/supprimer. Chaque variante porte son
+/// propre stock et son propre prix, independamment du produit parent.
+class _VariantsSection extends StatelessWidget {
+  final String productId;
+  final String currency;
+
+  const _VariantsSection({required this.productId, required this.currency});
+
+  @override
+  Widget build(BuildContext context) {
+    return Consumer<InventoryProvider>(
+      builder: (context, inventory, _) {
+        final variants = inventory.variantsForProduct(productId);
+
+        return Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                const Text(
+                  'Variantes',
+                  style: TextStyle(fontWeight: FontWeight.w700, fontSize: 15),
+                ),
+                TextButton.icon(
+                  onPressed: () =>
+                      _openVariantDialog(context, productId: productId),
+                  icon: const Icon(Icons.add, size: 18),
+                  label: const Text('Ajouter'),
+                ),
+              ],
+            ),
+            if (variants.isEmpty)
+              const Padding(
+                padding: EdgeInsets.symmetric(vertical: 8),
+                child: Text(
+                  'Aucune variante: le produit se vend tel quel, avec le stock '
+                  'ci-dessus. Ajoutez une variante pour des options comme '
+                  'couleur/taille, barbier/duree, longueur/technique...',
+                  style: TextStyle(color: Color(0xFF617287)),
+                ),
+              )
+            else
+              ...variants.map(
+                (variant) => _VariantTile(
+                  variant: variant,
+                  currency: currency,
+                  onEdit: () => _openVariantDialog(
+                    context,
+                    productId: productId,
+                    variant: variant,
+                  ),
+                  onDelete: () =>
+                      context.read<InventoryProvider>().deleteVariant(
+                        variant.id,
+                      ),
+                ),
+              ),
+          ],
+        );
+      },
+    );
+  }
+}
+
+class _VariantTile extends StatelessWidget {
+  final ProductVariant variant;
+  final String currency;
+  final VoidCallback onEdit;
+  final VoidCallback onDelete;
+
+  const _VariantTile({
+    required this.variant,
+    required this.currency,
+    required this.onEdit,
+    required this.onDelete,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final label = variant.attributes.isEmpty
+        ? (variant.sku ?? 'Variante')
+        : variant.attributesLabel;
+
+    return Container(
+      margin: const EdgeInsets.only(top: 8),
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+      decoration: BoxDecoration(
+        color: const Color(0xFFF6F8FB),
+        borderRadius: BorderRadius.circular(14),
+      ),
+      child: Row(
+        children: [
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Text(label, style: const TextStyle(fontWeight: FontWeight.w600)),
+                Text(
+                  '${formatMoney(variant.price, currency)} • Stock: ${variant.stock}'
+                  '${(variant.sku ?? '').isNotEmpty ? ' • SKU: ${variant.sku}' : ''}',
+                  style: const TextStyle(color: Color(0xFF617287), fontSize: 12),
+                ),
+              ],
+            ),
+          ),
+          IconButton(
+            tooltip: 'Modifier',
+            icon: const Icon(Icons.edit_outlined, size: 18),
+            onPressed: onEdit,
+          ),
+          IconButton(
+            tooltip: 'Supprimer',
+            icon: const Icon(Icons.delete_outline, size: 18),
+            onPressed: onDelete,
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _AttributeRow {
+  final TextEditingController nameController;
+  final TextEditingController valueController;
+
+  _AttributeRow({String name = '', String value = ''})
+    : nameController = TextEditingController(text: name),
+      valueController = TextEditingController(text: value);
+
+  void dispose() {
+    nameController.dispose();
+    valueController.dispose();
+  }
+}
+
+Future<void> _openVariantDialog(
+  BuildContext context, {
+  required String productId,
+  ProductVariant? variant,
+}) async {
+  final inventory = context.read<InventoryProvider>();
+
+  final skuController = TextEditingController(text: variant?.sku ?? '');
+  final barcodeController = TextEditingController(text: variant?.barcode ?? '');
+  final imageUrlController = TextEditingController(text: variant?.imageUrl ?? '');
+  final priceController = TextEditingController(
+    text: variant != null ? variant.price.toStringAsFixed(2) : '0',
+  );
+  final stockController = TextEditingController(
+    text: variant?.stock.toString() ?? '0',
+  );
+
+  final attributeRows = (variant != null && variant.attributes.isNotEmpty)
+      ? variant.attributes
+            .map(
+              (attribute) => _AttributeRow(
+                name: attribute.attributeName,
+                value: attribute.attributeValue,
+              ),
+            )
+            .toList()
+      : <_AttributeRow>[_AttributeRow()];
+
+  await showDialog<void>(
+    context: context,
+    builder: (dialogContext) {
+      return StatefulBuilder(
+        builder: (dialogContext, setDialogState) {
+          final mediaQuery = MediaQuery.of(dialogContext);
+          final availableHeight =
+              mediaQuery.size.height - mediaQuery.viewInsets.vertical - 48;
+          final dialogMaxHeight = availableHeight < 320 ? 320.0 : availableHeight;
+
+          return AnimatedPadding(
+            duration: const Duration(milliseconds: 120),
+            curve: Curves.easeOut,
+            padding: mediaQuery.viewInsets,
+            child: Dialog(
+              insetPadding: const EdgeInsets.symmetric(
+                horizontal: 16,
+                vertical: 24,
+              ),
+              child: ConstrainedBox(
+                constraints: BoxConstraints(
+                  maxWidth: 480,
+                  maxHeight: dialogMaxHeight,
+                ),
+                child: SingleChildScrollView(
+                  padding: const EdgeInsets.fromLTRB(20, 18, 20, 16),
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        variant == null ? 'Nouvelle variante' : 'Modifier variante',
+                        style: Theme.of(dialogContext).textTheme.titleLarge,
+                      ),
+                      const SizedBox(height: 14),
+                      const Text(
+                        'Options (ex: Couleur -> Noir, Taille -> XL, Barbier -> '
+                        'Jean, Duree -> 45 min...)',
+                        style: TextStyle(
+                          fontSize: 12,
+                          color: Color(0xFF617287),
+                        ),
+                      ),
+                      const SizedBox(height: 8),
+                      for (var i = 0; i < attributeRows.length; i++)
+                        Padding(
+                          padding: const EdgeInsets.only(bottom: 8),
+                          child: Row(
+                            children: [
+                              Expanded(
+                                child: TextField(
+                                  controller: attributeRows[i].nameController,
+                                  decoration: const InputDecoration(
+                                    labelText: 'Attribut',
+                                    isDense: true,
+                                  ),
+                                ),
+                              ),
+                              const SizedBox(width: 8),
+                              Expanded(
+                                child: TextField(
+                                  controller: attributeRows[i].valueController,
+                                  decoration: const InputDecoration(
+                                    labelText: 'Valeur',
+                                    isDense: true,
+                                  ),
+                                ),
+                              ),
+                              IconButton(
+                                icon: const Icon(Icons.close, size: 18),
+                                onPressed: attributeRows.length <= 1
+                                    ? null
+                                    : () {
+                                        setDialogState(() {
+                                          attributeRows[i].dispose();
+                                          attributeRows.removeAt(i);
+                                        });
+                                      },
+                              ),
+                            ],
+                          ),
+                        ),
+                      Align(
+                        alignment: Alignment.centerLeft,
+                        child: TextButton.icon(
+                          onPressed: () {
+                            setDialogState(() => attributeRows.add(_AttributeRow()));
+                          },
+                          icon: const Icon(Icons.add, size: 18),
+                          label: const Text('Ajouter un attribut'),
+                        ),
+                      ),
+                      const SizedBox(height: 8),
+                      TextField(
+                        controller: skuController,
+                        decoration: const InputDecoration(labelText: 'SKU'),
+                      ),
+                      TextField(
+                        controller: barcodeController,
+                        decoration: const InputDecoration(
+                          labelText: 'Code-barres',
+                        ),
+                      ),
+                      TextField(
+                        controller: imageUrlController,
+                        decoration: const InputDecoration(
+                          labelText: 'URL image (optionnel)',
+                        ),
+                      ),
+                      TextField(
+                        controller: priceController,
+                        decoration: const InputDecoration(labelText: 'Prix'),
+                        keyboardType: const TextInputType.numberWithOptions(
+                          decimal: true,
+                        ),
+                      ),
+                      TextField(
+                        controller: stockController,
+                        decoration: const InputDecoration(
+                          labelText: 'Stock de cette variante',
+                        ),
+                        keyboardType: TextInputType.number,
+                      ),
+                      const SizedBox(height: 20),
+                      Align(
+                        alignment: Alignment.centerRight,
+                        child: Wrap(
+                          spacing: 8,
+                          runSpacing: 8,
+                          children: [
+                            TextButton(
+                              onPressed: () => Navigator.pop(dialogContext),
+                              child: const Text('Annuler'),
+                            ),
+                            FilledButton(
+                              onPressed: () async {
+                                final parsedPrice =
+                                    double.tryParse(
+                                      priceController.text.trim().replaceAll(
+                                        ',',
+                                        '.',
+                                      ),
+                                    ) ??
+                                    0;
+                                final parsedStock =
+                                    int.tryParse(stockController.text.trim()) ??
+                                    0;
+
+                                final attributes = attributeRows
+                                    .where(
+                                      (row) =>
+                                          row.nameController.text
+                                              .trim()
+                                              .isNotEmpty &&
+                                          row.valueController.text
+                                              .trim()
+                                              .isNotEmpty,
+                                    )
+                                    .map(
+                                      (row) => VariantAttribute(
+                                        id: '',
+                                        variantId: variant?.id ?? '',
+                                        attributeName:
+                                            row.nameController.text.trim(),
+                                        attributeValue:
+                                            row.valueController.text.trim(),
+                                      ),
+                                    )
+                                    .toList();
+
+                                final variantToSave = ProductVariant(
+                                  id: variant?.id ?? '',
+                                  productId: productId,
+                                  sku: skuController.text.trim().isEmpty
+                                      ? null
+                                      : skuController.text.trim(),
+                                  barcode: barcodeController.text.trim().isEmpty
+                                      ? null
+                                      : barcodeController.text.trim(),
+                                  price: parsedPrice,
+                                  stock: parsedStock,
+                                  imageUrl:
+                                      imageUrlController.text.trim().isEmpty
+                                      ? null
+                                      : imageUrlController.text.trim(),
+                                  createdAt: variant?.createdAt ?? DateTime.now(),
+                                );
+
+                                try {
+                                  await inventory.addOrUpdateVariant(
+                                    productId: productId,
+                                    variant: variantToSave,
+                                    attributes: attributes,
+                                  );
+                                  if (dialogContext.mounted) {
+                                    Navigator.pop(dialogContext);
+                                  }
+                                } catch (e) {
+                                  if (dialogContext.mounted) {
+                                    final message = e.toString().replaceFirst(
+                                      'Exception: ',
+                                      '',
+                                    );
+                                    ScaffoldMessenger.of(
+                                      dialogContext,
+                                    ).showSnackBar(SnackBar(content: Text(message)));
+                                  }
+                                }
+                              },
+                              child: const Text('Enregistrer'),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            ),
+          );
+        },
+      );
+    },
+  );
+
+  for (final row in attributeRows) {
+    row.dispose();
+  }
+  skuController.dispose();
+  barcodeController.dispose();
+  imageUrlController.dispose();
+  priceController.dispose();
+  stockController.dispose();
 }

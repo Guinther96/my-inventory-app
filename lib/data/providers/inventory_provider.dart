@@ -6,7 +6,9 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 import '../models/category_model.dart';
 import '../models/company_model.dart';
 import '../models/product_model.dart';
+import '../models/product_variant.dart';
 import '../models/stock_movement_model.dart';
+import '../models/variant_attribute.dart';
 import '../../services/company/company_service.dart';
 import '../../services/inventory/inventory_supabase_service.dart';
 
@@ -22,6 +24,7 @@ class InventoryProvider extends ChangeNotifier {
   final List<Product> _products = [];
   final List<Category> _categories = [];
   final List<StockMovement> _movements = [];
+  final List<ProductVariant> _variants = [];
 
   bool _isLoading = false;
   bool _isInitialized = false;
@@ -44,6 +47,10 @@ class InventoryProvider extends ChangeNotifier {
   List<Product> get products => List.unmodifiable(_products);
   List<Category> get categories => List.unmodifiable(_categories);
   List<StockMovement> get movements => List.unmodifiable(_movements);
+  List<ProductVariant> get variants => List.unmodifiable(_variants);
+
+  List<ProductVariant> variantsForProduct(String productId) =>
+      _variants.where((v) => v.productId == productId).toList();
 
   List<Product> get lowStockProducts =>
       _products.where((p) => p.quantityInStock <= p.minStockAlert).toList();
@@ -216,6 +223,50 @@ class InventoryProvider extends ChangeNotifier {
     notifyListeners();
   }
 
+  Future<ProductVariant> addOrUpdateVariant({
+    required String productId,
+    required ProductVariant variant,
+    required List<VariantAttribute> attributes,
+  }) async {
+    final tenantId = await _resolveCompanyIdOrThrow();
+
+    final isNew = variant.id.trim().isEmpty;
+    final saved = await _inventoryService.upsertVariant(
+      companyId: tenantId,
+      productId: productId,
+      variant: variant,
+      isNew: isNew,
+    );
+
+    final savedAttributes = await _inventoryService.replaceVariantAttributes(
+      variantId: saved.id,
+      attributes: attributes,
+    );
+
+    final withAttributes = saved.copyWith(attributes: savedAttributes);
+
+    _variants.removeWhere((v) => v.id == variant.id || v.id == saved.id);
+    _variants.add(withAttributes);
+
+    notifyListeners();
+    return withAttributes;
+  }
+
+  Future<void> deleteVariant(String variantId) async {
+    final tenantId = _companyId;
+    if (tenantId == null) {
+      return;
+    }
+
+    await _inventoryService.deleteVariant(
+      companyId: tenantId,
+      variantId: variantId,
+    );
+
+    _variants.removeWhere((v) => v.id == variantId);
+    notifyListeners();
+  }
+
   Future<String> _resolveCompanyIdOrThrow() async {
     if (_companyId != null && _companyId!.isNotEmpty) {
       return _companyId!;
@@ -244,6 +295,7 @@ class InventoryProvider extends ChangeNotifier {
 
     _products.removeWhere((p) => p.id == productId);
     _movements.removeWhere((m) => m.productId == productId);
+    _variants.removeWhere((v) => v.productId == productId);
 
     notifyListeners();
   }
@@ -335,6 +387,7 @@ class InventoryProvider extends ChangeNotifier {
     );
     final fetchedProducts = await _inventoryService.fetchProducts(tenantId);
     final fetchedMovements = await _inventoryService.fetchMovements(tenantId);
+    final fetchedVariants = await _inventoryService.fetchVariants(tenantId);
 
     _categories
       ..clear()
@@ -347,6 +400,10 @@ class InventoryProvider extends ChangeNotifier {
     _movements
       ..clear()
       ..addAll(fetchedMovements);
+
+    _variants
+      ..clear()
+      ..addAll(fetchedVariants);
   }
 
   void _configureRealtime(String companyId) {
@@ -386,6 +443,17 @@ class InventoryProvider extends ChangeNotifier {
           event: PostgresChangeEvent.all,
           schema: 'public',
           table: 'stock_movements',
+          filter: PostgresChangeFilter(
+            type: PostgresChangeFilterType.eq,
+            column: 'company_id',
+            value: companyId,
+          ),
+          callback: (_) => _scheduleRealtimeReload(),
+        )
+        .onPostgresChanges(
+          event: PostgresChangeEvent.all,
+          schema: 'public',
+          table: 'product_variants',
           filter: PostgresChangeFilter(
             type: PostgresChangeFilterType.eq,
             column: 'company_id',
@@ -519,6 +587,7 @@ class InventoryProvider extends ChangeNotifier {
     _products.clear();
     _categories.clear();
     _movements.clear();
+    _variants.clear();
   }
 
   @override

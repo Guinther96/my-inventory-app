@@ -2,7 +2,9 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 
 import '../../data/models/category_model.dart';
 import '../../data/models/product_model.dart';
+import '../../data/models/product_variant.dart';
 import '../../data/models/stock_movement_model.dart';
+import '../../data/models/variant_attribute.dart';
 
 // Service d'acces aux donnees inventaire dans Supabase.
 // Toute lecture/ecriture passe par ce point pour centraliser les requetes SQL.
@@ -286,6 +288,110 @@ class InventorySupabaseService {
 
     // Reponse utile au provider: produit + mouvement crees.
     return {'product': updatedProduct, 'movement': movementRow};
+  }
+
+  // Recupere toutes les variantes (avec leurs attributs) de la company.
+  Future<List<ProductVariant>> fetchVariants(String companyId) async {
+    try {
+      final rows = await _client
+          .from('product_variants')
+          .select('*, variant_attributes(*)')
+          .eq('company_id', companyId)
+          .order('created_at');
+
+      return (rows as List<dynamic>)
+          .map(
+            (row) =>
+                ProductVariant.fromJson(Map<String, dynamic>.from(row as Map)),
+          )
+          .toList();
+    } on PostgrestException catch (e) {
+      // Si la migration product_variants n'a pas encore ete appliquee sur
+      // cet environnement (table absente), on degrade silencieusement vers
+      // "aucune variante" plutot que de casser tout le chargement de
+      // l'inventaire (produits/categories/mouvements).
+      if (e.code == '42P01') {
+        return const <ProductVariant>[];
+      }
+      rethrow;
+    }
+  }
+
+  // Cree ou met a jour une variante (sans ses attributs, geres a part).
+  Future<ProductVariant> upsertVariant({
+    required String companyId,
+    required String productId,
+    required ProductVariant variant,
+    required bool isNew,
+  }) async {
+    final payload = <String, dynamic>{
+      if (!isNew) 'id': variant.id,
+      'company_id': companyId,
+      'product_id': productId,
+      'sku': variant.sku,
+      'barcode': variant.barcode,
+      'price': variant.price,
+      'stock': variant.stock,
+      'image_url': variant.imageUrl,
+    };
+
+    final row = await _client
+        .from('product_variants')
+        .upsert(payload)
+        .select()
+        .single();
+
+    return ProductVariant.fromJson(Map<String, dynamic>.from(row));
+  }
+
+  // Remplace entierement les attributs d'une variante (supprime puis
+  // reinsere), plus simple et plus sur que de diffuser les changements.
+  Future<List<VariantAttribute>> replaceVariantAttributes({
+    required String variantId,
+    required List<VariantAttribute> attributes,
+  }) async {
+    await _client
+        .from('variant_attributes')
+        .delete()
+        .eq('variant_id', variantId);
+
+    if (attributes.isEmpty) {
+      return const <VariantAttribute>[];
+    }
+
+    final rows = await _client
+        .from('variant_attributes')
+        .insert(
+          attributes
+              .map(
+                (a) => {
+                  'variant_id': variantId,
+                  'attribute_name': a.attributeName,
+                  'attribute_value': a.attributeValue,
+                },
+              )
+              .toList(),
+        )
+        .select();
+
+    return (rows as List<dynamic>)
+        .map(
+          (row) =>
+              VariantAttribute.fromJson(Map<String, dynamic>.from(row as Map)),
+        )
+        .toList();
+  }
+
+  // Supprime une variante (et ses attributs, via ON DELETE CASCADE).
+  Future<void> deleteVariant({
+    required String companyId,
+    required String variantId,
+  }) async {
+    await _client
+        .from('product_variants')
+        .delete()
+        .eq('id', variantId)
+        .eq('company_id', companyId);
   }
 
   // Purge toutes les donnees inventaire d'une company.

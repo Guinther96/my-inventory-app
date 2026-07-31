@@ -8,6 +8,7 @@ import 'package:provider/provider.dart';
 import '../../../../core/utils/currency.dart';
 import '../../../../data/models/category_model.dart';
 import '../../../../data/models/product_model.dart';
+import '../../../../data/models/product_variant.dart';
 import '../../../../data/models/sale_model.dart';
 import '../../../../data/models/stock_movement_model.dart';
 import '../../../../data/models/tax_config_model.dart';
@@ -22,10 +23,16 @@ import '../../../../services/sales/sales_service.dart';
 // Imports des widgets communs (barre latérale, drawer)
 import '../../../common_widgets/app_drawer.dart';
 import '../../../common_widgets/app_sidebar.dart';
+import '../widgets/product_detail_sheet.dart';
 
 /// Alias local pour l'affichage des sous-totaux par devise dans le POS.
 String _formatCurrencyTotals(Map<String, double> totalsByCurrency) =>
     formatMoneyByCurrency(totalsByCurrency);
+
+/// Clé unique d'une ligne de panier: un même produit peut avoir plusieurs
+/// lignes distinctes si des variantes différentes sont sélectionnées.
+String _cartLineKey(String productId, String? variantId) =>
+    variantId == null ? productId : '$productId::$variantId';
 
 /// Écran principal de vente - Mode Caisse
 ///
@@ -59,8 +66,9 @@ class _SalesScreenState extends State<SalesScreen> {
   /// Permet de naviguer et filtrer sur un nombre illimité de niveaux de sous-catégories.
   List<String> _selectedCategoryPath = <String>[];
 
-  /// ID du produit actuellement sélectionné dans le panier
-  String? _selectedCartProductId;
+  /// Cle de la ligne de panier actuellement selectionnee (productId, ou
+  /// "productId::variantId" pour une ligne avec variante).
+  String? _selectedCartKey;
 
   /// Flag pour savoir si l'opération d'encaissement est en cours
   bool _isSubmitting = false;
@@ -242,10 +250,10 @@ class _SalesScreenState extends State<SalesScreen> {
                   ),
                   onIncrement: selectedEntry == null
                       ? null
-                      : () => _changeQuantity(selectedEntry.product, 1),
+                      : () => _changeQuantity(selectedEntry, 1),
                   onDecrement: selectedEntry == null
                       ? null
-                      : () => _changeQuantity(selectedEntry.product, -1),
+                      : () => _changeQuantity(selectedEntry, -1),
                   onTapTicket: _scrollToMobileTicketPanel,
                 );
               },
@@ -361,7 +369,7 @@ class _SalesScreenState extends State<SalesScreen> {
                                     width: 360,
                                     child: _TicketPanel(
                                       entries: cartEntries,
-                                      selectedProductId: _selectedCartProductId,
+                                      selectedCartKey: _selectedCartKey,
                                       selectedEntry: selectedCartEntry,
                                       notesController: _notesController,
                                       totalItems: totalItems,
@@ -379,10 +387,10 @@ class _SalesScreenState extends State<SalesScreen> {
                                           ),
                                       isSubmitting: _isSubmitting,
                                       onSelectEntry: _selectCartProduct,
-                                      onIncrement: (product) =>
-                                          _changeQuantity(product, 1),
-                                      onDecrement: (product) =>
-                                          _changeQuantity(product, -1),
+                                      onIncrement: (entry) =>
+                                          _changeQuantity(entry, 1),
+                                      onDecrement: (entry) =>
+                                          _changeQuantity(entry, -1),
                                       onRemove: _removeFromCart,
                                       onQuickAdd: (value) =>
                                           _applyQuickQuantity(value, inventory),
@@ -422,7 +430,12 @@ class _SalesScreenState extends State<SalesScreen> {
                                           () => _selectedCategoryPath = path,
                                         );
                                       },
-                                      onAddToCart: _addProductToCart,
+                                      onProductTap: (product) =>
+                                          _onProductTapped(
+                                            context,
+                                            product,
+                                            inventory,
+                                          ),
                                     ),
                                   ),
                                 ],
@@ -444,7 +457,7 @@ class _SalesScreenState extends State<SalesScreen> {
                                 key: _mobileTicketPanelKey,
                                 child: _TicketPanel(
                                   entries: cartEntries,
-                                  selectedProductId: _selectedCartProductId,
+                                  selectedCartKey: _selectedCartKey,
                                   selectedEntry: selectedCartEntry,
                                   notesController: _notesController,
                                   totalItems: totalItems,
@@ -461,10 +474,10 @@ class _SalesScreenState extends State<SalesScreen> {
                                   isSubmitting: _isSubmitting,
                                   compact: true,
                                   onSelectEntry: _selectCartProduct,
-                                  onIncrement: (product) =>
-                                      _changeQuantity(product, 1),
-                                  onDecrement: (product) =>
-                                      _changeQuantity(product, -1),
+                                  onIncrement: (entry) =>
+                                      _changeQuantity(entry, 1),
+                                  onDecrement: (entry) =>
+                                      _changeQuantity(entry, -1),
                                   onRemove: _removeFromCart,
                                   onQuickAdd: (value) =>
                                       _applyQuickQuantity(value, inventory),
@@ -501,7 +514,11 @@ class _SalesScreenState extends State<SalesScreen> {
                                     () => _selectedCategoryPath = path,
                                   );
                                 },
-                                onAddToCart: _addProductToCart,
+                                onProductTap: (product) => _onProductTapped(
+                                  context,
+                                  product,
+                                  inventory,
+                                ),
                               ),
                             ],
                           ),
@@ -601,7 +618,8 @@ class _SalesScreenState extends State<SalesScreen> {
   }
 
   /// Convertit les lignes du panier en objets CartEntryData avec les données de produit
-  /// Cela facilite l'affichage et la manipulation des articles du panier
+  /// (et de variante, le cas échéant). Cela facilite l'affichage et la
+  /// manipulation des articles du panier.
   List<_CartEntryData> _resolveCartEntries(InventoryProvider inventory) {
     final entries = <_CartEntryData>[];
 
@@ -614,8 +632,25 @@ class _SalesScreenState extends State<SalesScreen> {
         continue;
       }
 
-      // Crée un objet CartEntryData contenant le produit et sa quantité
-      entries.add(_CartEntryData(product: product, quantity: line.quantity));
+      // Si la ligne pointe vers une variante, la resout aussi; l'ignore si
+      // la variante a ete supprimee entre-temps (meme politique que pour un
+      // produit supprime).
+      ProductVariant? variant;
+      if (line.variantId != null) {
+        final productVariants = inventory.variantsForProduct(product.id);
+        final match = productVariants
+            .where((v) => v.id == line.variantId)
+            .toList();
+        if (match.isEmpty) {
+          continue;
+        }
+        variant = match.first;
+      }
+
+      // Crée un objet CartEntryData contenant le produit, la variante et la quantité
+      entries.add(
+        _CartEntryData(product: product, variant: variant, quantity: line.quantity),
+      );
     }
 
     // Trie les entrées par nom de produit pour un affichage cohérent
@@ -628,19 +663,19 @@ class _SalesScreenState extends State<SalesScreen> {
   _CartEntryData? _selectedCartEntry(List<_CartEntryData> entries) {
     // Si le panier est vide, réinitialise la sélection
     if (entries.isEmpty) {
-      _selectedCartProductId = null;
+      _selectedCartKey = null;
       return null;
     }
 
-    // Cherche l'entrée correspondant au produit sélectionné
+    // Cherche l'entrée correspondant à la ligne sélectionnée
     for (final entry in entries) {
-      if (entry.product.id == _selectedCartProductId) {
+      if (entry.key == _selectedCartKey) {
         return entry;
       }
     }
 
     // Si la sélection n'est pas trouvée, sélectionne la première entrée
-    _selectedCartProductId = entries.first.product.id;
+    _selectedCartKey = entries.first.key;
     return entries.first;
   }
 
@@ -671,105 +706,173 @@ class _SalesScreenState extends State<SalesScreen> {
     return sales.take(8).toList();
   }
 
-  /// Ajoute un produit au panier ou incrémente sa quantité s'il y existe déjà
-  /// Valide que le produit a du stock disponible avant d'ajouter
-  /// Sélectionne automatiquement le produit après ajout
+  /// Ajoute un produit (simple, sans variante) au panier ou incrémente sa
+  /// quantité s'il y existe déjà. Utilisé par le tap direct sur la grille
+  /// pour un produit qui n'a aucune variante.
   void _addProductToCart(Product product) {
-    // Refuse l'ajout si le produit n'a pas de stock disponible
-    if (product.quantityInStock <= 0) {
+    _addToCart(product: product, variant: null, quantity: 1);
+  }
+
+  /// Ajoute un produit (avec ou sans variante choisie) au panier, en
+  /// cumulant avec la ligne existante le cas échéant. Utilisé aussi bien par
+  /// le tap direct (produit simple, quantite 1) que par la fiche produit
+  /// (quantite choisie par l'utilisateur).
+  void _addToCart({
+    required Product product,
+    ProductVariant? variant,
+    required int quantity,
+  }) {
+    final maxStock = variant?.stock ?? product.quantityInStock;
+    // Refuse l'ajout si la ligne (produit ou variante) n'a pas de stock disponible
+    if (maxStock <= 0 || quantity <= 0) {
       return;
     }
 
+    final key = _cartLineKey(product.id, variant?.id);
+
     setState(() {
       // Récupère la ligne existante ou initialise à 0
-      final current = _cartLines[product.id];
-      // Calcule la nouvelle quantité: +1 de l'existante, normalisée par le stock
+      final current = _cartLines[key];
+      // Calcule la nouvelle quantité: quantite demandee + existante, normalisée par le stock
       final nextQuantity = _normalizeQuantity(
-        (current?.quantity ?? 0) + 1,
-        product.quantityInStock,
+        (current?.quantity ?? 0) + quantity,
+        maxStock,
       );
 
       // Crée ou met à jour la ligne du panier
-      _cartLines[product.id] = _CartLine(
+      _cartLines[key] = _CartLine(
         productId: product.id,
+        variantId: variant?.id,
         quantity: nextQuantity,
       );
-      // Sélectionne automatiquement le produit nouvellement ajouté
-      _selectedCartProductId = product.id;
+      // Sélectionne automatiquement la ligne nouvellement ajoutée
+      _selectedCartKey = key;
     });
   }
 
-  /// Modifie la quantité d'un produit dans le panier par un delta (positif ou négatif)
-  /// Si la quantité devient <= 0, le produit est supprimé du panier
-  void _changeQuantity(Product product, int delta) {
+  /// Modifie la quantité d'une ligne du panier par un delta (positif ou négatif)
+  /// Si la quantité devient <= 0, la ligne est supprimée du panier
+  void _changeQuantity(_CartEntryData entry, int delta) {
+    final key = entry.key;
     // Récupère la ligne existante du panier
-    final current = _cartLines[product.id];
-    // Sort si le produit n'existe pas dans le panier
+    final current = _cartLines[key];
+    // Sort si la ligne n'existe pas dans le panier
     if (current == null) {
       return;
     }
 
     // Calcule la nouvelle quantité avec le delta
     final nextQuantity = current.quantity + delta;
-    // Si la quantité devient zéro ou moins, supprime complètement le produit
+    // Si la quantité devient zéro ou moins, supprime complètement la ligne
     if (nextQuantity <= 0) {
-      _removeFromCart(product.id);
+      _removeFromCart(key);
       return;
     }
 
     setState(() {
       // Met à jour la quantité normalisée par le stock disponible
-      _cartLines[product.id] = current.copyWith(
-        quantity: _normalizeQuantity(nextQuantity, product.quantityInStock),
+      _cartLines[key] = current.copyWith(
+        quantity: _normalizeQuantity(nextQuantity, entry.maxStock),
       );
     });
   }
 
-  /// Définit la quantité d'un produit sélectionné à une valeur exacte
+  /// Définit la quantité de la ligne sélectionnée à une valeur exacte
   /// Utilisé par les boutons de quantité rapide (1, 2, 5, 10, etc.)
   void _applyQuickQuantity(int quantity, InventoryProvider inventory) {
-    // Récupère l'ID du produit actuellement sélectionné
-    final productId = _selectedCartProductId;
-    // Sort si aucun produit n'est sélectionné
-    if (productId == null) {
+    // Récupère la clé de la ligne actuellement sélectionnée
+    final key = _selectedCartKey;
+    // Sort si aucune ligne n'est sélectionnée
+    if (key == null) {
       return;
     }
 
-    // Récupère les données du produit et sa ligne de panier
-    final product = inventory.findProductById(productId);
-    final current = _cartLines[productId];
-    // Sort si le produit ou sa ligne n'existe pas
-    if (product == null || current == null) {
+    final current = _cartLines[key];
+    if (current == null) {
       return;
     }
+
+    // Récupère les données du produit (et de la variante le cas échéant)
+    final product = inventory.findProductById(current.productId);
+    if (product == null) {
+      return;
+    }
+    final matchingVariants = current.variantId == null
+        ? const <ProductVariant>[]
+        : inventory
+              .variantsForProduct(current.productId)
+              .where((v) => v.id == current.variantId)
+              .toList();
+    final variant = matchingVariants.isEmpty ? null : matchingVariants.first;
+    final maxStock = variant?.stock ?? product.quantityInStock;
 
     setState(() {
       // Met à jour avec la quantité exacte, normalisée par le stock
-      _cartLines[productId] = current.copyWith(
-        quantity: _normalizeQuantity(quantity, product.quantityInStock),
+      _cartLines[key] = current.copyWith(
+        quantity: _normalizeQuantity(quantity, maxStock),
       );
     });
   }
 
-  /// Supprime un produit du panier
-  /// Ajuste aussi la sélection si le produit supprimé était sélectionné
-  void _removeFromCart(String productId) {
+  /// Supprime une ligne du panier
+  /// Ajuste aussi la sélection si la ligne supprimée était sélectionnée
+  void _removeFromCart(String key) {
     setState(() {
-      // Supprime la ligne du panier pour ce produit
-      _cartLines.remove(productId);
+      // Supprime la ligne du panier
+      _cartLines.remove(key);
 
-      // Si le produit supprimé était sélectionné, passe à un autre ou à null
-      if (_selectedCartProductId == productId) {
-        _selectedCartProductId = _cartLines.keys.isEmpty
+      // Si la ligne supprimée était sélectionnée, passe à une autre ou à null
+      if (_selectedCartKey == key) {
+        _selectedCartKey = _cartLines.keys.isEmpty
             ? null
             : _cartLines.keys.first;
       }
     });
   }
 
-  /// Sélectionne un produit du panier pour l'interface (highlight visuel)
-  void _selectCartProduct(String productId) {
-    setState(() => _selectedCartProductId = productId);
+  /// Sélectionne une ligne du panier pour l'interface (highlight visuel)
+  void _selectCartProduct(String key) {
+    setState(() => _selectedCartKey = key);
+  }
+
+  /// Ouvre la fiche produit moderne: selection des variantes/options, choix
+  /// de la quantite, puis ajout au panier. Appelee quand le produit tape a
+  /// au moins une variante; les produits simples restent ajoutes en un tap.
+  void _openProductDetail(
+    BuildContext context,
+    Product product,
+    InventoryProvider inventory,
+  ) {
+    final variants = inventory.variantsForProduct(product.id);
+    final categoryName =
+        inventory.findCategoryById(product.categoryId ?? '')?.name ??
+        'Sans categorie';
+
+    ProductDetailSheet.show(
+      context,
+      product: product,
+      categoryName: categoryName,
+      variants: variants,
+      onAddToCart: (variant, quantity) {
+        _addToCart(product: product, variant: variant, quantity: quantity);
+      },
+    );
+  }
+
+  /// Point d'entree unique du tap sur une carte produit du catalogue: ouvre
+  /// la fiche produit si des variantes existent, sinon ajoute directement
+  /// (comportement historique, sans friction pour les produits simples).
+  void _onProductTapped(
+    BuildContext context,
+    Product product,
+    InventoryProvider inventory,
+  ) {
+    final variants = inventory.variantsForProduct(product.id);
+    if (variants.isEmpty) {
+      _addProductToCart(product);
+      return;
+    }
+    _openProductDetail(context, product, inventory);
   }
 
   /// Vide complètement le panier, réinitialise la sélection et les notes
@@ -778,7 +881,7 @@ class _SalesScreenState extends State<SalesScreen> {
       // Supprime tous les articles du panier
       _cartLines.clear();
       // Réinitialise la sélection
-      _selectedCartProductId = null;
+      _selectedCartKey = null;
       // Efface les notes de vente
       _notesController.clear();
     });
@@ -836,6 +939,7 @@ class _SalesScreenState extends State<SalesScreen> {
               (line) => CartItemInput(
                 productId: line.productId,
                 quantity: line.quantity,
+                variantId: line.variantId,
               ),
             )
             .toList(),
@@ -857,7 +961,7 @@ class _SalesScreenState extends State<SalesScreen> {
       // Vide le panier après succès
       setState(() {
         _cartLines.clear();
-        _selectedCartProductId = null;
+        _selectedCartKey = null;
         _notesController.clear();
       });
 
@@ -915,7 +1019,9 @@ class _SalesScreenState extends State<SalesScreen> {
       final items = sale.items
           .map(
             (item) => <String, dynamic>{
-              'name': item.productName,
+              'name': (item.variantLabel?.isNotEmpty ?? false)
+                  ? '${item.productName} (${item.variantLabel})'
+                  : item.productName,
               'quantity': item.quantity,
               'price': item.unitPrice,
               'currency': item.productCurrency,
@@ -966,6 +1072,23 @@ class _SalesScreenState extends State<SalesScreen> {
       // Vérifie que la quantité est positive
       if (line.quantity <= 0) {
         return 'Le panier contient une quantite invalide.';
+      }
+
+      // Ligne avec variante: le stock disponible est celui de la variante,
+      // pas celui du produit parent.
+      if (line.variantId != null) {
+        final matches = inventory
+            .variantsForProduct(line.productId)
+            .where((v) => v.id == line.variantId)
+            .toList();
+        if (matches.isEmpty) {
+          return 'Une variante du panier n existe plus.';
+        }
+        final variant = matches.first;
+        if (line.quantity > variant.stock) {
+          return 'Stock insuffisant pour ${product.name} (${variant.attributesLabel}). Disponible: ${variant.stock}.';
+        }
+        continue;
       }
 
       // Vérifie qu'il y a assez de stock disponible
@@ -1185,7 +1308,7 @@ class _HeaderMetric extends StatelessWidget {
 /// Responsive: plein écran en desktop, compact en mobile
 class _TicketPanel extends StatelessWidget {
   final List<_CartEntryData> entries;
-  final String? selectedProductId;
+  final String? selectedCartKey;
   final _CartEntryData? selectedEntry;
   final TextEditingController notesController;
   final int totalItems;
@@ -1198,8 +1321,8 @@ class _TicketPanel extends StatelessWidget {
   final bool isSubmitting;
   final bool compact;
   final ValueChanged<String> onSelectEntry;
-  final ValueChanged<Product> onIncrement;
-  final ValueChanged<Product> onDecrement;
+  final ValueChanged<_CartEntryData> onIncrement;
+  final ValueChanged<_CartEntryData> onDecrement;
   final ValueChanged<String> onRemove;
   final ValueChanged<int> onQuickAdd;
   final VoidCallback? onClear;
@@ -1209,7 +1332,7 @@ class _TicketPanel extends StatelessWidget {
 
   const _TicketPanel({
     required this.entries,
-    required this.selectedProductId,
+    required this.selectedCartKey,
     required this.selectedEntry,
     required this.notesController,
     required this.totalItems,
@@ -1417,11 +1540,11 @@ class _TicketPanel extends StatelessWidget {
                           final entry = entries[index];
                           return _CartEntryTile(
                             entry: entry,
-                            selected: entry.product.id == selectedProductId,
-                            onTap: () => onSelectEntry(entry.product.id),
-                            onIncrement: () => onIncrement(entry.product),
-                            onDecrement: () => onDecrement(entry.product),
-                            onRemove: () => onRemove(entry.product.id),
+                            selected: entry.key == selectedCartKey,
+                            onTap: () => onSelectEntry(entry.key),
+                            onIncrement: () => onIncrement(entry),
+                            onDecrement: () => onDecrement(entry),
+                            onRemove: () => onRemove(entry.key),
                           );
                         },
                       ),
@@ -1576,11 +1699,11 @@ class _TicketPanel extends StatelessWidget {
                   final entry = entries[index];
                   return _CartEntryTile(
                     entry: entry,
-                    selected: entry.product.id == selectedProductId,
-                    onTap: () => onSelectEntry(entry.product.id),
-                    onIncrement: () => onIncrement(entry.product),
-                    onDecrement: () => onDecrement(entry.product),
-                    onRemove: () => onRemove(entry.product.id),
+                    selected: entry.key == selectedCartKey,
+                    onTap: () => onSelectEntry(entry.key),
+                    onIncrement: () => onIncrement(entry),
+                    onDecrement: () => onDecrement(entry),
+                    onRemove: () => onRemove(entry.key),
                   );
                 },
               ),
@@ -1923,9 +2046,22 @@ class _CartEntryTile extends StatelessWidget {
                           height: 1.2,
                         ),
                       ),
+                      if (entry.variantLabel != null) ...[
+                        const SizedBox(height: 2),
+                        Text(
+                          entry.variantLabel!,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: TextStyle(
+                            fontSize: 12,
+                            color: Theme.of(context).primaryColor,
+                            fontWeight: FontWeight.w600,
+                          ),
+                        ),
+                      ],
                       const SizedBox(height: 6),
                       Text(
-                        '${formatMoney(entry.product.price, entry.product.currency)} x ${entry.quantity}',
+                        '${formatMoney(entry.unitPrice, entry.product.currency)} x ${entry.quantity}',
                         style: TextStyle(
                           color: Theme.of(
                             context,
@@ -2043,7 +2179,7 @@ class _QuickQuantityPanel extends StatelessWidget {
           Text(
             selectedEntry == null
                 ? 'Selectionnez une ligne du panier pour ajuster sa quantite.'
-                : 'Stock dispo: ${selectedEntry!.product.quantityInStock}',
+                : 'Stock dispo: ${selectedEntry!.maxStock}',
             style: const TextStyle(color: Color(0xFF617287)),
           ),
           const SizedBox(height: 12),
@@ -2320,7 +2456,7 @@ class _CatalogPanel extends StatelessWidget {
   final bool compact;
   final ValueChanged<String> onSearchChanged;
   final ValueChanged<List<String>> onCategoryPathChanged;
-  final ValueChanged<Product> onAddToCart;
+  final ValueChanged<Product> onProductTap;
 
   const _CatalogPanel({
     required this.products,
@@ -2332,7 +2468,7 @@ class _CatalogPanel extends StatelessWidget {
     required this.isTablet,
     required this.onSearchChanged,
     required this.onCategoryPathChanged,
-    required this.onAddToCart,
+    required this.onProductTap,
     this.compact = false,
   });
 
@@ -2382,7 +2518,7 @@ class _CatalogPanel extends StatelessWidget {
           inventory: inventory,
           compact: compact,
           maxCrossAxisExtent: isTablet ? 220 : 180,
-          onAddToCart: onAddToCart,
+          onProductTap: onProductTap,
         ),
         if (compact) ...[
           const SizedBox(height: 16),
@@ -2590,14 +2726,14 @@ class _ProductGrid extends StatelessWidget {
   final InventoryProvider inventory;
   final bool compact;
   final double maxCrossAxisExtent;
-  final ValueChanged<Product> onAddToCart;
+  final ValueChanged<Product> onProductTap;
 
   const _ProductGrid({
     required this.products,
     required this.inventory,
     required this.compact,
     required this.maxCrossAxisExtent,
-    required this.onAddToCart,
+    required this.onProductTap,
   });
 
   @override
@@ -2624,14 +2760,21 @@ class _ProductGrid extends StatelessWidget {
               final categoryName =
                   inventory.findCategoryById(product.categoryId ?? '')?.name ??
                   'Sans categorie';
+              // Un produit avec variantes n'a pas de stock propre: le stock
+              // disponible est la somme des stocks de ses variantes.
+              final productVariants = inventory.variantsForProduct(product.id);
+              final hasVariants = productVariants.isNotEmpty;
+              final availableStock = hasVariants
+                  ? productVariants.fold<int>(0, (sum, v) => sum + v.stock)
+                  : product.quantityInStock;
 
               return _ProductTile(
                 product: product,
                 categoryName: categoryName,
-                // Désactive les clics si le produit est en rupture de stock
-                onAdd: product.quantityInStock <= 0
-                    ? null
-                    : () => onAddToCart(product),
+                hasVariants: hasVariants,
+                availableStock: availableStock,
+                // Désactive les clics si la ligne est en rupture de stock
+                onAdd: availableStock <= 0 ? null : () => onProductTap(product),
               );
             },
           );
@@ -2721,20 +2864,25 @@ class _EmptyCatalogState extends StatelessWidget {
 class _ProductTile extends StatelessWidget {
   final Product product;
   final String categoryName;
+  final bool hasVariants;
+  final int availableStock;
   final VoidCallback? onAdd;
 
   const _ProductTile({
     required this.product,
     required this.categoryName,
+    required this.hasVariants,
+    required this.availableStock,
     required this.onAdd,
   });
 
   @override
   Widget build(BuildContext context) {
-    // Détermine l'état du stock pour affichage visuel
-    final isOutOfStock = product.quantityInStock <= 0;
+    // Détermine l'état du stock pour affichage visuel (somme des variantes
+    // le cas échéant, sinon stock du produit).
+    final isOutOfStock = availableStock <= 0;
     final isLowStock =
-        !isOutOfStock && product.quantityInStock <= product.minStockAlert;
+        !isOutOfStock && availableStock <= product.minStockAlert;
 
     return InkWell(
       borderRadius: BorderRadius.circular(24),
@@ -2805,19 +2953,29 @@ class _ProductTile extends StatelessWidget {
                 ),
               ),
               const SizedBox(height: 8),
-              // Quantité en stock
-              Text(
-                'Stock: ${product.quantityInStock}',
-                style: const TextStyle(color: Color(0xFF617287)),
+              // Quantité en stock (somme des variantes le cas échéant)
+              Row(
+                children: [
+                  Text(
+                    'Stock: $availableStock',
+                    style: const TextStyle(color: Color(0xFF617287)),
+                  ),
+                  if (hasVariants) ...[
+                    const SizedBox(width: 6),
+                    const Icon(Icons.tune, size: 14, color: Color(0xFF617287)),
+                  ],
+                ],
               ),
               const SizedBox(height: 10),
               // Pied: prix + bouton ajouter
               Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  // Prix unitaire
+                  // Prix unitaire (ou "plusieurs options" si le prix varie par variante)
                   Text(
-                    formatMoney(product.price, product.currency),
+                    hasVariants
+                        ? 'Plusieurs options'
+                        : formatMoney(product.price, product.currency),
                     style: const TextStyle(
                       fontSize: 18,
                       fontWeight: FontWeight.w800,
@@ -2825,7 +2983,7 @@ class _ProductTile extends StatelessWidget {
                     ),
                   ),
                   const SizedBox(height: 8),
-                  // Bouton ajouter (désactivé en rupture de stock)
+                  // Bouton ajouter / voir options (désactivé en rupture de stock)
                   SizedBox(
                     width: double.infinity,
                     child: FilledButton(
@@ -2840,7 +2998,7 @@ class _ProductTile extends StatelessWidget {
                           vertical: 10,
                         ),
                       ),
-                      child: const Text('Ajouter'),
+                      child: Text(hasVariants ? 'Voir les options' : 'Ajouter'),
                     ),
                   ),
                 ],
@@ -3115,29 +3273,63 @@ class _RecentSalesPanel extends StatelessWidget {
 /// Permet la modification immutable via copyWith()
 class _CartLine {
   final String productId;
+  final String? variantId;
   final int quantity;
 
-  const _CartLine({required this.productId, required this.quantity});
+  const _CartLine({
+    required this.productId,
+    this.variantId,
+    required this.quantity,
+  });
+
+  /// Clé unique de cette ligne dans `_cartLines`.
+  String get key => _cartLineKey(productId, variantId);
 
   /// Retourne une copie avec certains champs modifiés
-  _CartLine copyWith({String? productId, int? quantity}) {
+  _CartLine copyWith({String? productId, String? variantId, int? quantity}) {
     return _CartLine(
       productId: productId ?? this.productId,
+      variantId: variantId ?? this.variantId,
       quantity: quantity ?? this.quantity,
     );
   }
 }
 
 /// Modèle de données pour l'affichage d'un article du panier
-/// Combine un Product avec sa quantité en panier
-/// Calcule automatiquement le total de la ligne (prix unitaire × quantité)
+/// Combine un Product (et éventuellement une ProductVariant) avec sa
+/// quantité en panier. Calcule automatiquement le total de la ligne
+/// (prix unitaire × quantité), le prix unitaire et le stock disponible
+/// venant de la variante si elle est sélectionnée, sinon du produit.
 class _CartEntryData {
   final Product product;
+  final ProductVariant? variant;
   final int quantity;
 
-  const _CartEntryData({required this.product, required this.quantity});
+  const _CartEntryData({
+    required this.product,
+    this.variant,
+    required this.quantity,
+  });
+
+  /// Clé unique de cette ligne, cohérente avec `_CartLine.key`.
+  String get key => _cartLineKey(product.id, variant?.id);
+
+  /// Prix unitaire effectif: celui de la variante si sélectionnée, sinon
+  /// celui du produit.
+  double get unitPrice => variant?.price ?? product.price;
+
+  /// Stock disponible pour cette ligne: celui de la variante si
+  /// sélectionnée, sinon celui du produit.
+  int get maxStock => variant?.stock ?? product.quantityInStock;
+
+  /// Libellé des attributs sélectionnés (ex: "Couleur: Noir, Taille: XL"),
+  /// ou null si la ligne ne porte pas de variante.
+  String? get variantLabel =>
+      variant == null || variant!.attributes.isEmpty
+      ? null
+      : variant!.attributesLabel;
 
   /// Calcule le montant total de cette ligne (prix unitaire × quantité)
-  double get lineTotal => product.price * quantity;
+  double get lineTotal => unitPrice * quantity;
 }
 
