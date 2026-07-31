@@ -8,6 +8,7 @@ import '../../../common_widgets/app_sidebar.dart';
 import '../../../../../core/utils/currency.dart';
 import '../../../../../data/models/client_model.dart';
 import '../../../../../data/models/reservation_model.dart';
+import '../../../../../data/models/service_category_model.dart';
 import '../../../../../data/models/service_model.dart';
 import '../../../../../data/models/service_order_item_model.dart';
 import '../../../../../data/models/service_order_model.dart';
@@ -15,6 +16,7 @@ import '../../../../../data/models/tax_config_model.dart';
 import '../../../../../data/models/user_profile_model.dart';
 import '../../../../../data/providers/inventory_provider.dart';
 import '../../../../../services/company/company_service.dart';
+import '../../../../../services/service_orders/service_category_service.dart';
 import '../../../../../services/service_orders/service_service.dart';
 import '../../../../../services/service_orders/service_order_service.dart';
 import '../../../../../services/user/user_profile_service.dart';
@@ -31,6 +33,7 @@ class CreateServiceOrderScreen extends StatefulWidget {
 
 class _CreateServiceOrderScreenState extends State<CreateServiceOrderScreen> {
   final ServiceService _serviceCatalogService = ServiceService();
+  final ServiceCategoryService _categoryService = ServiceCategoryService();
   final ServiceOrderService _service = ServiceOrderService();
   final UserProfileService _userProfileService = UserProfileService();
 
@@ -39,9 +42,13 @@ class _CreateServiceOrderScreenState extends State<CreateServiceOrderScreen> {
   String? _error;
 
   List<Service> _services = const <Service>[];
+  List<ServiceCategory> _categories = const <ServiceCategory>[];
   List<Client> _clients = const <Client>[];
   List<UserProfile> _providers = const <UserProfile>[];
   List<_OrderLine> _lines = <_OrderLine>[];
+
+  /// Recherche texte pour filtrer rapidement le catalogue de services.
+  String _searchQuery = '';
 
   /// Devise de paiement choisie par le client pour le ticket courant.
   String? _selectedPaymentCurrency;
@@ -79,6 +86,7 @@ class _CreateServiceOrderScreenState extends State<CreateServiceOrderScreen> {
         _serviceCatalogService.fetchServices(),
         _service.fetchClients(),
         _userProfileService.fetchCompanyUsers(),
+        _categoryService.fetchCategories(),
         if (companyId != null && companyId.isNotEmpty)
           CompanyService().fetchExchangeRate(companyId),
         if (companyId != null && companyId.isNotEmpty)
@@ -91,11 +99,13 @@ class _CreateServiceOrderScreenState extends State<CreateServiceOrderScreen> {
 
       _services = results[0] as List<Service>;
       _clients = results[1] as List<Client>;
-      if (results.length > 3) {
-        _exchangeRate = results[3] as double?;
-      }
+      _categories = (results[3] as List<ServiceCategory>)
+        ..sort((a, b) => a.name.compareTo(b.name));
       if (results.length > 4) {
-        _taxConfig = results[4] as TaxConfig;
+        _exchangeRate = results[4] as double?;
+      }
+      if (results.length > 5) {
+        _taxConfig = results[5] as TaxConfig;
       }
 
       // Filtrer seulement les prestataires
@@ -380,6 +390,44 @@ class _CreateServiceOrderScreenState extends State<CreateServiceOrderScreen> {
     ).showSnackBar(SnackBar(content: Text(message)));
   }
 
+  /// Services actifs correspondant a la recherche, groupes par categorie
+  /// (dans l'ordre des categories, puis un groupe "Sans categorie" en fin
+  /// s'il y en a). Utilise par l'UI pour afficher un catalogue structure
+  /// plutot qu'une liste plate, plus lisible pour un salon avec beaucoup de
+  /// prestations.
+  List<MapEntry<String, List<Service>>> get _groupedFilteredServices {
+    final query = _searchQuery.trim().toLowerCase();
+    final matching = _services.where((service) {
+      if (!service.isActive) {
+        return false;
+      }
+      if (query.isEmpty) {
+        return true;
+      }
+      return service.name.toLowerCase().contains(query) ||
+          (service.description?.toLowerCase().contains(query) ?? false);
+    }).toList();
+
+    final byCategory = <String, List<Service>>{};
+    for (final service in matching) {
+      final key = service.categoryId ?? '';
+      byCategory.putIfAbsent(key, () => <Service>[]).add(service);
+    }
+
+    final groups = <MapEntry<String, List<Service>>>[];
+    for (final category in _categories) {
+      final services = byCategory.remove(category.id);
+      if (services != null && services.isNotEmpty) {
+        groups.add(MapEntry(category.name, services));
+      }
+    }
+    final uncategorized = byCategory.remove('');
+    if (uncategorized != null && uncategorized.isNotEmpty) {
+      groups.add(MapEntry('Sans categorie', uncategorized));
+    }
+    return groups;
+  }
+
   Service? _findServiceById(String id) {
     for (final service in _services) {
       if (service.id == id) {
@@ -507,20 +555,69 @@ class _CreateServiceOrderScreenState extends State<CreateServiceOrderScreen> {
                         style: Theme.of(context).textTheme.titleLarge,
                       ),
                       const SizedBox(height: 8),
-                      Wrap(
-                        spacing: 8,
-                        runSpacing: 8,
-                        children: _services
-                            .map(
-                              (service) => ActionChip(
-                                label: Text(
-                                  '${service.name} (${formatMoney(service.price, service.currency)})',
-                                ),
-                                onPressed: () => _addService(service),
-                              ),
-                            )
-                            .toList(),
+                      TextField(
+                        onChanged: (value) =>
+                            setState(() => _searchQuery = value),
+                        decoration: InputDecoration(
+                          hintText: 'Rechercher un service...',
+                          prefixIcon: const Icon(Icons.search),
+                          filled: true,
+                          fillColor:
+                              Theme.of(context).inputDecorationTheme.fillColor,
+                          border: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(14),
+                            borderSide: BorderSide.none,
+                          ),
+                        ),
                       ),
+                      const SizedBox(height: 12),
+                      if (_groupedFilteredServices.isEmpty)
+                        const Padding(
+                          padding: EdgeInsets.symmetric(vertical: 8),
+                          child: Text('Aucun service ne correspond.'),
+                        )
+                      else
+                        ..._groupedFilteredServices.map(
+                          (group) => Padding(
+                            padding: const EdgeInsets.only(bottom: 14),
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Row(
+                                  children: [
+                                    Icon(
+                                      Icons.spa_outlined,
+                                      size: 16,
+                                      color: Theme.of(context).colorScheme.primary,
+                                    ),
+                                    const SizedBox(width: 6),
+                                    Text(
+                                      group.key,
+                                      style: const TextStyle(
+                                        fontWeight: FontWeight.w700,
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                                const SizedBox(height: 8),
+                                Wrap(
+                                  spacing: 8,
+                                  runSpacing: 8,
+                                  children: group.value
+                                      .map(
+                                        (service) => ActionChip(
+                                          label: Text(
+                                            '${service.name} (${formatMoney(service.price, service.currency)})',
+                                          ),
+                                          onPressed: () => _addService(service),
+                                        ),
+                                      )
+                                      .toList(),
+                                ),
+                              ],
+                            ),
+                          ),
+                        ),
                       const SizedBox(height: 12),
                       Card(
                         child: Padding(

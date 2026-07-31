@@ -38,6 +38,11 @@ class RouteAccessGuard {
       managerOnly: true,
     ),
     _RouteRule(prefix: '/sales', featureKey: 'sales'),
+    _RouteRule(
+      prefix: '/beauty/service-categories',
+      featureKey: 'services',
+      managerOnly: true,
+    ),
     _RouteRule(prefix: '/beauty/services', featureKey: 'services'),
     _RouteRule(prefix: '/beauty/reservations', featureKey: 'services'),
     _RouteRule(prefix: '/beauty/orders/new', featureKey: 'services'),

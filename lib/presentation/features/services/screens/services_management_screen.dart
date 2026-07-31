@@ -7,9 +7,11 @@ import 'package:provider/provider.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 import '../../../../../core/utils/currency.dart';
+import '../../../../../data/models/service_category_model.dart';
 import '../../../../../data/models/service_model.dart';
 import '../../../../../data/models/service_order_model.dart';
 import '../../../../../data/providers/user_profile_provider.dart';
+import '../../../../../services/service_orders/service_category_service.dart';
 import '../../../../../services/service_orders/service_service.dart';
 import '../../../../../services/service_orders/service_order_service.dart';
 import '../../../common_widgets/app_drawer.dart';
@@ -25,6 +27,7 @@ class ServicesManagementScreen extends StatefulWidget {
 
 class _ServicesManagementScreenState extends State<ServicesManagementScreen> {
   final ServiceService _service = ServiceService();
+  final ServiceCategoryService _categoryService = ServiceCategoryService();
   final ServiceOrderService _orderService = ServiceOrderService();
   RealtimeChannel? _realtimeChannel;
   Timer? _realtimeDebounce;
@@ -33,8 +36,12 @@ class _ServicesManagementScreenState extends State<ServicesManagementScreen> {
   bool _isSaving = false;
   String? _error;
   List<Service> _services = const <Service>[];
+  List<ServiceCategory> _categories = const <ServiceCategory>[];
   List<ServiceOrder> _recentOrders = const <ServiceOrder>[];
   String? _selectedRecentOrderId;
+
+  /// Categorie active pour filtrer le catalogue ci-dessous. Null = "Toutes".
+  String? _selectedCategoryId;
 
   @override
   void initState() {
@@ -101,6 +108,17 @@ class _ServicesManagementScreenState extends State<ServicesManagementScreen> {
             ),
             callback: (_) => _scheduleRealtimeLoad(),
           )
+          .onPostgresChanges(
+            event: PostgresChangeEvent.all,
+            schema: 'public',
+            table: 'service_categories',
+            filter: PostgresChangeFilter(
+              type: PostgresChangeFilterType.eq,
+              column: 'company_id',
+              value: companyId,
+            ),
+            callback: (_) => _scheduleRealtimeLoad(),
+          )
           .subscribe();
     } catch (_) {
       // L'ecran reste utilisable en rafraichissement manuel si Realtime echoue.
@@ -126,6 +144,7 @@ class _ServicesManagementScreenState extends State<ServicesManagementScreen> {
       final results = await Future.wait<dynamic>([
         _service.fetchServices(activeOnly: false),
         _orderService.fetchRecentOrders(limit: 100),
+        _categoryService.fetchCategories(),
       ]);
       if (!mounted) {
         return;
@@ -133,6 +152,12 @@ class _ServicesManagementScreenState extends State<ServicesManagementScreen> {
       setState(() {
         _services = results[0] as List<Service>;
         _recentOrders = results[1] as List<ServiceOrder>;
+        _categories = (results[2] as List<ServiceCategory>)
+          ..sort((a, b) => a.name.compareTo(b.name));
+        if (_selectedCategoryId != null &&
+            !_categories.any((c) => c.id == _selectedCategoryId)) {
+          _selectedCategoryId = null;
+        }
         if (_recentOrders.isEmpty) {
           _selectedRecentOrderId = null;
         } else {
@@ -156,6 +181,22 @@ class _ServicesManagementScreenState extends State<ServicesManagementScreen> {
     }
   }
 
+  List<Service> get _filteredServices {
+    final categoryId = _selectedCategoryId;
+    if (categoryId == null) {
+      return _services;
+    }
+    return _services.where((s) => s.categoryId == categoryId).toList();
+  }
+
+  String _categoryNameFor(String? categoryId) {
+    if (categoryId == null) {
+      return 'Sans categorie';
+    }
+    final matches = _categories.where((c) => c.id == categoryId).toList();
+    return matches.isEmpty ? 'Sans categorie' : matches.first.name;
+  }
+
   Future<void> _openEditor({Service? initial}) async {
     final isManager = context.read<UserProfileProvider>().isManager;
     if (!isManager) {
@@ -173,6 +214,11 @@ class _ServicesManagementScreenState extends State<ServicesManagementScreen> {
     );
     var active = initial?.isActive ?? true;
     var selectedCurrency = normalizeCurrencyCode(initial?.currency);
+    var selectedCategoryId = initial?.categoryId;
+    // Un service existant deja sans categorie (donnees anterieures a cette
+    // fonctionnalite) peut rester tel quel; un nouveau service doit en
+    // choisir une.
+    final allowUncategorized = initial != null && initial.categoryId == null;
 
     final saved = await showDialog<bool>(
       context: context,
@@ -222,6 +268,40 @@ class _ServicesManagementScreenState extends State<ServicesManagementScreen> {
                         setLocalState(() => selectedCurrency = value);
                       },
                     ),
+                    const SizedBox(height: 10),
+                    DropdownButtonFormField<String?>(
+                      value: selectedCategoryId,
+                      decoration: const InputDecoration(
+                        labelText: 'Categorie *',
+                      ),
+                      items: [
+                        if (allowUncategorized)
+                          const DropdownMenuItem<String?>(
+                            value: null,
+                            child: Text('Sans categorie (existant)'),
+                          ),
+                        ..._categories.map(
+                          (c) => DropdownMenuItem<String?>(
+                            value: c.id,
+                            child: Text(c.name),
+                          ),
+                        ),
+                      ],
+                      onChanged: (value) {
+                        setLocalState(() => selectedCategoryId = value);
+                      },
+                    ),
+                    if (_categories.isEmpty)
+                      const Padding(
+                        padding: EdgeInsets.only(top: 6),
+                        child: Text(
+                          'Creez d\'abord une categorie de services.',
+                          style: TextStyle(
+                            color: Colors.orange,
+                            fontSize: 12,
+                          ),
+                        ),
+                      ),
                     const SizedBox(height: 10),
                     TextField(
                       controller: durationCtrl,
@@ -274,6 +354,10 @@ class _ServicesManagementScreenState extends State<ServicesManagementScreen> {
       _showMessage('Nom et prix valides obligatoires.');
       return;
     }
+    if (selectedCategoryId == null && !allowUncategorized) {
+      _showMessage('La categorie est obligatoire.');
+      return;
+    }
 
     setState(() {
       _isSaving = true;
@@ -294,6 +378,7 @@ class _ServicesManagementScreenState extends State<ServicesManagementScreen> {
           durationMinutes: duration,
           createdBy: initial?.createdBy,
           isActive: active,
+          categoryId: selectedCategoryId,
           createdAt: initial?.createdAt ?? DateTime.now(),
           updatedAt: DateTime.now(),
         ),
@@ -891,6 +976,43 @@ class _ServicesManagementScreenState extends State<ServicesManagementScreen> {
                     ],
                   ],
                   const SizedBox(height: 8),
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      Text(
+                        'Categories',
+                        style: Theme.of(context).textTheme.headlineSmall,
+                      ),
+                      if (isManager)
+                        Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            TextButton.icon(
+                              onPressed: () =>
+                                  context.push('/beauty/service-categories'),
+                              icon: const Icon(Icons.settings_outlined),
+                              label: const Text('Gerer'),
+                            ),
+                            const SizedBox(width: 4),
+                            FilledButton.tonalIcon(
+                              onPressed: () =>
+                                  context.push('/beauty/service-categories'),
+                              icon: const Icon(Icons.add),
+                              label: const Text('Nouvelle categorie'),
+                            ),
+                          ],
+                        ),
+                    ],
+                  ),
+                  const SizedBox(height: 10),
+                  _CategoryFilterRow(
+                    categories: _categories,
+                    services: _services,
+                    selectedCategoryId: _selectedCategoryId,
+                    onSelected: (categoryId) =>
+                        setState(() => _selectedCategoryId = categoryId),
+                  ),
+                  const SizedBox(height: 16),
                   Text(
                     'Catalogue des services',
                     style: Theme.of(context).textTheme.headlineSmall,
@@ -898,7 +1020,7 @@ class _ServicesManagementScreenState extends State<ServicesManagementScreen> {
                   const SizedBox(height: 12),
                   if (_isLoading)
                     const Center(child: CircularProgressIndicator())
-                  else if (_services.isEmpty)
+                  else if (_filteredServices.isEmpty)
                     const Card(
                       child: Padding(
                         padding: EdgeInsets.all(16),
@@ -906,12 +1028,14 @@ class _ServicesManagementScreenState extends State<ServicesManagementScreen> {
                       ),
                     )
                   else
-                    ..._services.map(
+                    ..._filteredServices.map(
                       (service) => Card(
                         child: ListTile(
                           title: Text(service.name),
                           subtitle: Text(
-                            '${formatMoney(service.price, service.currency)} | ${service.durationMinutes ?? '-'} min | ${service.description ?? 'Sans description'}',
+                            '${formatMoney(service.price, service.currency)} | '
+                            '${service.durationMinutes ?? '-'} min | '
+                            '${_categoryNameFor(service.categoryId)}',
                           ),
                           trailing: Wrap(
                             spacing: 8,
@@ -945,6 +1069,140 @@ class _ServicesManagementScreenState extends State<ServicesManagementScreen> {
             ),
           ),
         ],
+      ),
+    );
+  }
+}
+
+/// Rangee horizontale de cartes categories (avec compteur) pour filtrer le
+/// catalogue de services ci-dessous. Une carte "Toutes" reinitialise le
+/// filtre.
+class _CategoryFilterRow extends StatelessWidget {
+  final List<ServiceCategory> categories;
+  final List<Service> services;
+  final String? selectedCategoryId;
+  final ValueChanged<String?> onSelected;
+
+  const _CategoryFilterRow({
+    required this.categories,
+    required this.services,
+    required this.selectedCategoryId,
+    required this.onSelected,
+  });
+
+  int _countFor(String? categoryId) => categoryId == null
+      ? services.length
+      : services.where((s) => s.categoryId == categoryId).length;
+
+  @override
+  Widget build(BuildContext context) {
+    if (categories.isEmpty) {
+      return const Text(
+        'Aucune categorie: creez-en une pour organiser vos services.',
+        style: TextStyle(color: Color(0xFF617287)),
+      );
+    }
+
+    return SizedBox(
+      height: 96,
+      child: ListView.separated(
+        scrollDirection: Axis.horizontal,
+        itemCount: categories.length + 1,
+        separatorBuilder: (context, index) => const SizedBox(width: 10),
+        itemBuilder: (context, index) {
+          if (index == 0) {
+            return _CategoryFilterCard(
+              label: 'Toutes',
+              count: _countFor(null),
+              selected: selectedCategoryId == null,
+              onTap: () => onSelected(null),
+            );
+          }
+          final category = categories[index - 1];
+          return _CategoryFilterCard(
+            label: category.name,
+            count: _countFor(category.id),
+            selected: selectedCategoryId == category.id,
+            onTap: () => onSelected(category.id),
+          );
+        },
+      ),
+    );
+  }
+}
+
+class _CategoryFilterCard extends StatelessWidget {
+  final String label;
+  final int count;
+  final bool selected;
+  final VoidCallback onTap;
+
+  const _CategoryFilterCard({
+    required this.label,
+    required this.count,
+    required this.selected,
+    required this.onTap,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final colorScheme = theme.colorScheme;
+
+    return InkWell(
+      borderRadius: BorderRadius.circular(18),
+      onTap: onTap,
+      child: Container(
+        width: 140,
+        padding: const EdgeInsets.all(14),
+        decoration: BoxDecoration(
+          color: selected
+              ? colorScheme.primary
+              : colorScheme.surface,
+          borderRadius: BorderRadius.circular(18),
+          border: Border.all(
+            color: selected
+                ? colorScheme.primary
+                : colorScheme.outlineVariant,
+          ),
+          boxShadow: [
+            BoxShadow(
+              color: colorScheme.shadow.withValues(alpha: 0.06),
+              blurRadius: 10,
+              offset: const Offset(0, 6),
+            ),
+          ],
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Icon(
+              Icons.spa_outlined,
+              color: selected ? Colors.white : colorScheme.primary,
+            ),
+            const SizedBox(height: 8),
+            Text(
+              label,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: TextStyle(
+                fontWeight: FontWeight.w700,
+                color: selected ? Colors.white : null,
+              ),
+            ),
+            const SizedBox(height: 2),
+            Text(
+              '$count service${count > 1 ? 's' : ''}',
+              style: TextStyle(
+                fontSize: 12,
+                color: selected
+                    ? Colors.white.withValues(alpha: 0.85)
+                    : theme.textTheme.bodySmall?.color?.withValues(alpha: 0.7),
+              ),
+            ),
+          ],
+        ),
       ),
     );
   }

@@ -112,6 +112,13 @@ class AppSidebar extends StatelessWidget {
                 selected: currentRoute == '/beauty/services',
                 onTap: () => context.go('/beauty/services'),
               ),
+            if (isManager && featureAccess.canAccess('services'))
+              ListTile(
+                leading: const Icon(Icons.category_outlined),
+                title: const Text('Categories de services'),
+                selected: currentRoute == '/beauty/service-categories',
+                onTap: () => context.go('/beauty/service-categories'),
+              ),
             if (featureAccess.canAccess('services'))
               ListTile(
                 leading: const Icon(Icons.event_available),

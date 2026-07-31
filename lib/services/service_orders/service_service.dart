@@ -55,6 +55,11 @@ class ServiceService {
       'duration_minutes': service.durationMinutes,
       if (isNew) 'created_by': currentUserId,
       'is_active': service.isActive,
+      'category_id': service.categoryId,
+      'image_url': service.imageUrl,
+      'default_provider_id': service.defaultProviderId,
+      'commission_type': service.commissionType,
+      'commission_value': service.commissionValue,
     };
 
     final row = await _client

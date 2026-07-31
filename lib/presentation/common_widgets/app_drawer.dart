@@ -96,6 +96,15 @@ class AppDrawer extends StatelessWidget {
                 _goToRoute(context, '/beauty/services');
               },
             ),
+          if (isManager && featureAccess.canAccess('services'))
+            ListTile(
+              leading: const Icon(Icons.category_outlined),
+              title: const Text('Categories de services'),
+              selected: currentRoute == '/beauty/service-categories',
+              onTap: () {
+                _goToRoute(context, '/beauty/service-categories');
+              },
+            ),
           if (featureAccess.canAccess('services'))
             ListTile(
               leading: const Icon(Icons.event_available),

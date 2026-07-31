@@ -24,6 +24,7 @@ import '../../presentation/features/sales/screens/sales_screen.dart';
 import '../../data/models/reservation_model.dart';
 import '../../presentation/features/services/screens/create_service_order_screen.dart';
 import '../../presentation/features/services/screens/reservation_screen.dart';
+import '../../presentation/features/services/screens/service_categories_screen.dart';
 import '../../presentation/features/services/screens/services_management_screen.dart';
 import '../../presentation/features/provider/screens/provider_dashboard_screen.dart';
 import '../../presentation/features/provider/screens/add_reservation_screen.dart';
@@ -152,6 +153,10 @@ final appRouter = GoRouter(
     GoRoute(
       path: '/beauty/services',
       builder: (context, state) => const ServicesManagementScreen(),
+    ),
+    GoRoute(
+      path: '/beauty/service-categories',
+      builder: (context, state) => const ServiceCategoriesScreen(),
     ),
     GoRoute(
       path: '/beauty/reservations',

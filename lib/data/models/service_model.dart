@@ -10,6 +10,19 @@ class Service {
   final int? durationMinutes;
   final String? createdBy;
   final bool isActive;
+  final String? categoryId;
+  final String? imageUrl;
+
+  /// Prestataire suggere par defaut pour ce service. Simple pre-remplissage
+  /// pratique: l'assignation qui fait autorite reste celle choisie a la
+  /// ligne de commande (service_order_items), pas celle-ci.
+  final String? defaultProviderId;
+
+  /// Commission indicative associee au service (non branchee dans le calcul
+  /// des gains prestataire, qui reste base sur l'assignation par commande).
+  final String? commissionType;
+  final double? commissionValue;
+
   final DateTime createdAt;
   final DateTime updatedAt;
 
@@ -23,6 +36,11 @@ class Service {
     this.durationMinutes,
     this.createdBy,
     required this.isActive,
+    this.categoryId,
+    this.imageUrl,
+    this.defaultProviderId,
+    this.commissionType,
+    this.commissionValue,
     required this.createdAt,
     required this.updatedAt,
   });
@@ -45,6 +63,13 @@ class Service {
       durationMinutes: int.tryParse(json['duration_minutes']?.toString() ?? ''),
       createdBy: json['created_by']?.toString(),
       isActive: json['is_active'] == null ? true : json['is_active'] == true,
+      categoryId: json['category_id']?.toString(),
+      imageUrl: json['image_url']?.toString(),
+      defaultProviderId: json['default_provider_id']?.toString(),
+      commissionType: json['commission_type']?.toString(),
+      commissionValue: double.tryParse(
+        json['commission_value']?.toString() ?? '',
+      ),
       createdAt:
           DateTime.tryParse(createdAtRaw?.toString() ?? '') ?? DateTime.now(),
       updatedAt:
@@ -62,6 +87,11 @@ class Service {
     int? durationMinutes,
     String? createdBy,
     bool? isActive,
+    String? categoryId,
+    String? imageUrl,
+    String? defaultProviderId,
+    String? commissionType,
+    double? commissionValue,
     DateTime? createdAt,
     DateTime? updatedAt,
   }) {
@@ -75,6 +105,11 @@ class Service {
       durationMinutes: durationMinutes ?? this.durationMinutes,
       createdBy: createdBy ?? this.createdBy,
       isActive: isActive ?? this.isActive,
+      categoryId: categoryId ?? this.categoryId,
+      imageUrl: imageUrl ?? this.imageUrl,
+      defaultProviderId: defaultProviderId ?? this.defaultProviderId,
+      commissionType: commissionType ?? this.commissionType,
+      commissionValue: commissionValue ?? this.commissionValue,
       createdAt: createdAt ?? this.createdAt,
       updatedAt: updatedAt ?? this.updatedAt,
     );
@@ -91,6 +126,11 @@ class Service {
       'duration_minutes': durationMinutes,
       'created_by': createdBy,
       'is_active': isActive,
+      'category_id': categoryId,
+      'image_url': imageUrl,
+      'default_provider_id': defaultProviderId,
+      'commission_type': commissionType,
+      'commission_value': commissionValue,
     };
   }
 }
