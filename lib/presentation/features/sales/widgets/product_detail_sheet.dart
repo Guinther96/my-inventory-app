@@ -70,9 +70,21 @@ class _ProductDetailSheetState extends State<ProductDetailSheet> {
     return names;
   }
 
+  /// Normalise un nom/valeur d'attribut pour la comparaison uniquement
+  /// (jamais pour l'affichage): les options viennent de saisie libre, donc
+  /// un espace superflu ou une difference de casse ("Blanc" vs "blanc ")
+  /// invisible a l'oeil dans un chip suffit a faire echouer une comparaison
+  /// stricte alors que la variante existe bel et bien.
+  String _normalizeAttr(String value) => value.trim().toLowerCase();
+
   /// La variante correspondant exactement a la selection courante, ou null
   /// tant que toutes les options n'ont pas ete choisies (ou si la
-  /// combinaison n'existe pas).
+  /// combinaison n'existe pas). Une variante correspond uniquement si TOUS
+  /// les attributs selectionnes correspondent exactement aux siens: on
+  /// construit la `Map<String, String>` propre a chaque variante (nom ->
+  /// valeur normalises) plutot que de chercher un attribut a la fois avec
+  /// where().firstOrNull, qui peut retomber sur un mauvais doublon si l'ordre
+  /// renvoye par Supabase n'est pas garanti.
   ProductVariant? get _matchingVariant {
     if (!_hasVariants) {
       return null;
@@ -82,13 +94,23 @@ class _ProductDetailSheetState extends State<ProductDetailSheet> {
       return null;
     }
 
+    final normalizedSelection = {
+      for (final entry in _selectedAttributes.entries)
+        _normalizeAttr(entry.key): _normalizeAttr(entry.value),
+    };
+
     for (final variant in widget.variants) {
-      final matches = names.every((name) {
-        final attribute = variant.attributes
-            .where((a) => a.attributeName == name)
-            .firstOrNull;
-        return attribute?.attributeValue == _selectedAttributes[name];
-      });
+      final variantAttributes = <String, String>{
+        for (final attribute in variant.attributes)
+          _normalizeAttr(attribute.attributeName): _normalizeAttr(
+            attribute.attributeValue,
+          ),
+      };
+
+      final matches = normalizedSelection.entries.every(
+        (entry) => variantAttributes[entry.key] == entry.value,
+      );
+
       if (matches) {
         return variant;
       }
@@ -101,6 +123,20 @@ class _ProductDetailSheetState extends State<ProductDetailSheet> {
       return widget.product.quantityInStock;
     }
     return _matchingVariant?.stock ?? 0;
+  }
+
+  /// Disponibilite globale du produit, independamment de la combinaison
+  /// actuellement selectionnee: pour un produit avec variantes, c'est la
+  /// somme des stocks de toutes ses variantes (disponible des qu'une seule a
+  /// du stock), pas seulement celui de l'option en cours de selection. Sans
+  /// ca, un produit a plusieurs variantes semble "en rupture" tant que
+  /// l'utilisateur n'a pas encore choisi une option, meme si des variantes
+  /// ont du stock.
+  int get _totalAvailableStock {
+    if (!_hasVariants) {
+      return widget.product.quantityInStock;
+    }
+    return widget.variants.fold<int>(0, (sum, v) => sum + v.stock);
   }
 
   double get _displayPrice => _matchingVariant?.price ?? widget.product.price;
@@ -135,6 +171,11 @@ class _ProductDetailSheetState extends State<ProductDetailSheet> {
     final canAdd = _hasVariants
         ? (_matchingVariant != null && _availableStock > 0)
         : widget.product.quantityInStock > 0;
+    // Le produit est globalement indisponible seulement si aucune de ses
+    // variantes (ou lui-meme, sans variante) n'a de stock. Tant qu'il reste
+    // du stock ailleurs, l'attente est juste que l'utilisateur choisisse une
+    // option, ce qui merite un libelle different de "Indisponible".
+    final isProductOutOfStock = _totalAvailableStock <= 0;
     final images = _galleryImages;
 
     return DraggableScrollableSheet(
@@ -224,7 +265,7 @@ class _ProductDetailSheetState extends State<ProductDetailSheet> {
                         ],
                       ),
                       const SizedBox(height: 10),
-                      _StockBadge(available: _availableStock),
+                      _StockBadge(available: _totalAvailableStock),
                       if ((widget.product.description ?? '').trim().isNotEmpty) ...[
                         const SizedBox(height: 16),
                         Text(
@@ -300,7 +341,9 @@ class _ProductDetailSheetState extends State<ProductDetailSheet> {
                         label: Text(
                           canAdd
                               ? 'Ajouter au panier'
-                              : 'Indisponible',
+                              : (isProductOutOfStock
+                                    ? 'Indisponible'
+                                    : 'Choisissez une option'),
                         ),
                       ),
                     ),
@@ -313,10 +356,6 @@ class _ProductDetailSheetState extends State<ProductDetailSheet> {
       },
     );
   }
-}
-
-extension _FirstOrNullExtension<T> on Iterable<T> {
-  T? get firstOrNull => isEmpty ? null : first;
 }
 
 class _StockBadge extends StatelessWidget {

@@ -2,12 +2,14 @@ import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:provider/provider.dart';
 
+import '../../core/theme/app_colors.dart';
 import '../../data/providers/feature_access_provider.dart';
 import '../../data/providers/user_profile_provider.dart';
 import '../features/reports/screens/user_roles_screen.dart';
+import 'side_menu_item.dart';
 
 class AppDrawer extends StatelessWidget {
-  const AppDrawer({Key? key}) : super(key: key);
+  const AppDrawer({super.key});
 
   void _goToRoute(BuildContext context, String route) {
     context.go(route);
@@ -29,119 +31,191 @@ class AppDrawer extends StatelessWidget {
     final profile = context.watch<UserProfileProvider>();
     final featureAccess = context.watch<FeatureAccessProvider>();
     final isManager = profile.isManager;
+    final email = profile.profile?.email ?? '';
+    final initial = email.isNotEmpty ? email[0].toUpperCase() : '?';
 
     return Drawer(
-      child: ListView(
-        children: [
-          DrawerHeader(
-            decoration: BoxDecoration(
-              color: Theme.of(context).colorScheme.primary,
+      backgroundColor: Colors.white,
+      child: SafeArea(
+        child: Column(
+          children: [
+            Padding(
+              padding: const EdgeInsets.fromLTRB(20, 20, 20, 16),
+              child: Row(
+                children: [
+                  Container(
+                    width: 40,
+                    height: 40,
+                    decoration: BoxDecoration(
+                      color: AppColors.primary,
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                    alignment: Alignment.center,
+                    child: const Icon(
+                      Icons.shopping_bag_rounded,
+                      color: Colors.white,
+                    ),
+                  ),
+                  const SizedBox(width: 12),
+                  const Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          'BiznisPlus',
+                          style: TextStyle(
+                            fontSize: 18,
+                            fontWeight: FontWeight.w700,
+                            color: AppColors.textPrimary,
+                          ),
+                        ),
+                        Text(
+                          'Gestion de stock',
+                          style: TextStyle(
+                            fontSize: 12,
+                            fontWeight: FontWeight.w500,
+                            color: AppColors.textSecondary,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
             ),
-            child: const Text(
-              'BiznisPlus',
-              style: TextStyle(color: Colors.white, fontSize: 24),
+            const Padding(
+              padding: EdgeInsets.symmetric(horizontal: 12),
+              child: Divider(height: 1),
             ),
-          ),
-          if (featureAccess.canAccess('dashboard'))
-            ListTile(
-              leading: const Icon(Icons.dashboard),
-              title: const Text('Tableau de bord'),
-              selected: currentRoute == '/',
-              onTap: () {
-                _goToRoute(context, '/');
-              },
+            Expanded(
+              child: ListView(
+                padding: const EdgeInsets.symmetric(vertical: 8),
+                children: [
+                  if (featureAccess.canAccess('dashboard'))
+                    SideMenuItem(
+                      icon: Icons.dashboard,
+                      label: 'Tableau de bord',
+                      selected: currentRoute == '/',
+                      onTap: () => _goToRoute(context, '/'),
+                    ),
+                  if (isManager && featureAccess.canAccess('inventory'))
+                    SideMenuItem(
+                      icon: Icons.inventory,
+                      label: 'Produits',
+                      selected: currentRoute == '/products',
+                      onTap: () => _goToRoute(context, '/products'),
+                    ),
+                  if (isManager && featureAccess.canAccess('inventory'))
+                    SideMenuItem(
+                      icon: Icons.category,
+                      label: 'Categories',
+                      selected: currentRoute == '/categories',
+                      onTap: () => _goToRoute(context, '/categories'),
+                    ),
+                  if (isManager && featureAccess.canAccess('inventory'))
+                    SideMenuItem(
+                      icon: Icons.sync_alt,
+                      label: 'Mouvements',
+                      selected: currentRoute == '/movements',
+                      onTap: () => _goToRoute(context, '/movements'),
+                    ),
+                  if (featureAccess.canAccess('sales'))
+                    SideMenuItem(
+                      icon: Icons.point_of_sale,
+                      label: 'Ventes',
+                      selected: currentRoute == '/sales',
+                      onTap: () => _goToRoute(context, '/sales'),
+                    ),
+                  if (featureAccess.canAccess('services'))
+                    SideMenuItem(
+                      icon: Icons.spa,
+                      label: 'Services',
+                      selected: currentRoute == '/beauty/services',
+                      onTap: () => _goToRoute(context, '/beauty/services'),
+                    ),
+                  if (isManager && featureAccess.canAccess('services'))
+                    SideMenuItem(
+                      icon: Icons.category_outlined,
+                      label: 'Categories de services',
+                      selected: currentRoute == '/beauty/service-categories',
+                      onTap: () =>
+                          _goToRoute(context, '/beauty/service-categories'),
+                    ),
+                  if (featureAccess.canAccess('services'))
+                    SideMenuItem(
+                      icon: Icons.event_available,
+                      label: 'Reservations',
+                      selected: currentRoute == '/beauty/reservations',
+                      onTap: () => _goToRoute(context, '/beauty/reservations'),
+                    ),
+                  if (isManager && featureAccess.canAccess('reports'))
+                    SideMenuItem(
+                      icon: Icons.bar_chart,
+                      label: 'Rapports',
+                      selected: currentRoute == '/reports',
+                      onTap: () => _goToRoute(context, '/reports'),
+                    ),
+                  if (isManager && featureAccess.canAccess('users'))
+                    SideMenuItem(
+                      icon: Icons.manage_accounts,
+                      label: 'Utilisateurs',
+                      selected: currentRoute == '/users',
+                      onTap: () => _openUsers(context),
+                    ),
+                  if (featureAccess.canAccess('settings'))
+                    SideMenuItem(
+                      icon: Icons.settings,
+                      label: 'Parametres',
+                      selected: currentRoute == '/settings',
+                      onTap: () => _goToRoute(context, '/settings'),
+                    ),
+                ],
+              ),
             ),
-          if (isManager && featureAccess.canAccess('inventory'))
-            ListTile(
-              leading: const Icon(Icons.inventory),
-              title: const Text('Produits'),
-              selected: currentRoute == '/products',
-              onTap: () {
-                _goToRoute(context, '/products');
-              },
+            const Padding(
+              padding: EdgeInsets.symmetric(horizontal: 12),
+              child: Divider(height: 1),
             ),
-          if (isManager && featureAccess.canAccess('inventory'))
-            ListTile(
-              leading: const Icon(Icons.category),
-              title: const Text('Categories'),
-              selected: currentRoute == '/categories',
-              onTap: () {
-                _goToRoute(context, '/categories');
-              },
+            Container(
+              margin: const EdgeInsets.all(12),
+              padding: const EdgeInsets.all(10),
+              decoration: BoxDecoration(
+                color: const Color(0xFFF8FAFC),
+                borderRadius: BorderRadius.circular(14),
+                border: Border.all(color: AppColors.border),
+              ),
+              child: Row(
+                children: [
+                  CircleAvatar(
+                    radius: 16,
+                    backgroundColor: AppColors.primary.withValues(alpha: 0.12),
+                    child: Text(
+                      initial,
+                      style: const TextStyle(
+                        color: AppColors.primary,
+                        fontWeight: FontWeight.w700,
+                        fontSize: 13,
+                      ),
+                    ),
+                  ),
+                  const SizedBox(width: 10),
+                  Expanded(
+                    child: Text(
+                      email.isEmpty ? 'Utilisateur' : email,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: const TextStyle(
+                        fontSize: 13,
+                        fontWeight: FontWeight.w600,
+                        color: AppColors.textPrimary,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
             ),
-          if (isManager && featureAccess.canAccess('inventory'))
-            ListTile(
-              leading: const Icon(Icons.sync_alt),
-              title: const Text('Mouvements'),
-              selected: currentRoute == '/movements',
-              onTap: () {
-                _goToRoute(context, '/movements');
-              },
-            ),
-          if (featureAccess.canAccess('sales'))
-            ListTile(
-              leading: const Icon(Icons.point_of_sale),
-              title: const Text('Ventes'),
-              selected: currentRoute == '/sales',
-              onTap: () {
-                _goToRoute(context, '/sales');
-              },
-            ),
-          if (featureAccess.canAccess('services'))
-            ListTile(
-              leading: const Icon(Icons.spa),
-              title: const Text('Services'),
-              selected: currentRoute == '/beauty/services',
-              onTap: () {
-                _goToRoute(context, '/beauty/services');
-              },
-            ),
-          if (isManager && featureAccess.canAccess('services'))
-            ListTile(
-              leading: const Icon(Icons.category_outlined),
-              title: const Text('Categories de services'),
-              selected: currentRoute == '/beauty/service-categories',
-              onTap: () {
-                _goToRoute(context, '/beauty/service-categories');
-              },
-            ),
-          if (featureAccess.canAccess('services'))
-            ListTile(
-              leading: const Icon(Icons.event_available),
-              title: const Text('Reservations'),
-              selected: currentRoute == '/beauty/reservations',
-              onTap: () {
-                _goToRoute(context, '/beauty/reservations');
-              },
-            ),
-          if (isManager && featureAccess.canAccess('reports'))
-            ListTile(
-              leading: const Icon(Icons.bar_chart),
-              title: const Text('Rapports'),
-              selected: currentRoute == '/reports',
-              onTap: () {
-                _goToRoute(context, '/reports');
-              },
-            ),
-          if (isManager && featureAccess.canAccess('users'))
-            ListTile(
-              leading: const Icon(Icons.manage_accounts),
-              title: const Text('Utilisateurs'),
-              selected: currentRoute == '/users',
-              onTap: () {
-                _openUsers(context);
-              },
-            ),
-          if (featureAccess.canAccess('settings'))
-            ListTile(
-              leading: const Icon(Icons.settings),
-              title: const Text('Parametres'),
-              selected: currentRoute == '/settings',
-              onTap: () {
-                _goToRoute(context, '/settings');
-              },
-            ),
-        ],
+          ],
+        ),
       ),
     );
   }

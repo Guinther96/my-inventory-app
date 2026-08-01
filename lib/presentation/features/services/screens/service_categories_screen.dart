@@ -344,7 +344,7 @@ class _ServiceCategoriesScreenState extends State<ServiceCategoriesScreen> {
                                     maxCrossAxisExtent: 260,
                                     mainAxisSpacing: 14,
                                     crossAxisSpacing: 14,
-                                    mainAxisExtent: 170,
+                                    mainAxisExtent: 182,
                                   ),
                               itemCount: _categories.length,
                               itemBuilder: (context, index) {

@@ -52,25 +52,42 @@ class InventoryProvider extends ChangeNotifier {
   List<ProductVariant> variantsForProduct(String productId) =>
       _variants.where((v) => v.productId == productId).toList();
 
+  // Stock reellement disponible d'un produit: pour un produit sans variante,
+  // c'est Product.quantityInStock. Des qu'il a au moins une variante, le
+  // stock du produit parent n'est plus pertinent (il vit sur les variantes)
+  // et on utilise exclusivement la somme des stocks de ses variantes.
+  int effectiveStock(Product product) {
+    final variants = variantsForProduct(product.id);
+    if (variants.isEmpty) {
+      return product.quantityInStock;
+    }
+    return variants.fold<int>(0, (sum, v) => sum + v.stock);
+  }
+
+  // Disponible si le produit n'a pas de variante et a du stock propre, ou si
+  // au moins une de ses variantes a un stock > 0.
+  bool isProductAvailable(Product product) => effectiveStock(product) > 0;
+
   List<Product> get lowStockProducts =>
-      _products.where((p) => p.quantityInStock <= p.minStockAlert).toList();
+      _products.where((p) => effectiveStock(p) <= p.minStockAlert).toList();
 
   int get totalProducts => _products.length;
   int get totalItemsInStock =>
-      _products.fold(0, (sum, p) => sum + p.quantityInStock);
+      _products.fold(0, (sum, p) => sum + effectiveStock(p));
 
   double get totalStockValue =>
-      _products.fold(0, (sum, p) => sum + (p.price * p.quantityInStock));
+      _products.fold(0, (sum, p) => sum + (p.price * effectiveStock(p)));
 
   // Regroupe la valeur de stock par devise (un stock mixte HTG/USD ne peut
   // pas etre resume par un montant unique).
   Map<String, double> get totalStockValueByCurrency {
     final totals = <String, double>{};
     for (final product in _products) {
+      final stock = effectiveStock(product);
       totals.update(
         product.currency,
-        (value) => value + (product.price * product.quantityInStock),
-        ifAbsent: () => product.price * product.quantityInStock,
+        (value) => value + (product.price * stock),
+        ifAbsent: () => product.price * stock,
       );
     }
     return totals;

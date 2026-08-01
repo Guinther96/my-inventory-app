@@ -5,6 +5,9 @@ import 'package:go_router/go_router.dart';
 import 'package:provider/provider.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
+import '../../../../core/theme/app_colors.dart';
+import '../../../../core/theme/app_radius.dart';
+import '../../../../core/theme/app_typography.dart';
 import '../../../../core/utils/currency.dart';
 import '../../../../data/models/service_order_model.dart';
 import '../../../../data/models/stock_movement_model.dart';
@@ -13,6 +16,10 @@ import '../../../../data/providers/user_profile_provider.dart';
 import '../../../../services/service_orders/service_order_service.dart';
 import '../../../common_widgets/app_drawer.dart';
 import '../../../common_widgets/app_sidebar.dart';
+import '../../../common_widgets/custom_button.dart';
+import '../../../common_widgets/custom_card.dart';
+import '../../../common_widgets/section_title.dart';
+import '../../../common_widgets/stat_card.dart';
 
 /// Ecran dashboard modernise avec:
 /// - En-tete hero
@@ -311,7 +318,6 @@ class _DashboardScreenState extends State<DashboardScreen> {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    final colorScheme = theme.colorScheme;
 
     final screenWidth = MediaQuery.of(context).size.width;
     final isDesktop = screenWidth > 950;
@@ -386,32 +392,29 @@ class _DashboardScreenState extends State<DashboardScreen> {
                             spacing: 16,
                             runSpacing: 16,
                             children: [
-                              _ModernSummaryCard(
+                              StatCard(
                                 width: cardWidth,
                                 title: 'Produits au total',
                                 value: inventory.totalProducts.toString(),
-                                subtitle: 'Articles disponibles en catalogue',
                                 icon: Icons.inventory_2_rounded,
-                                accent: const Color(0xFF0C7EA5),
+                                accent: AppColors.primary,
                               ),
-                              _ModernSummaryCard(
+                              StatCard(
                                 width: cardWidth,
                                 title: 'Stock faible',
                                 value: inventory.lowStockProducts.length
                                     .toString(),
-                                subtitle: 'Produits a reapprovisionner',
                                 icon: Icons.warning_amber_rounded,
-                                accent: const Color(0xFFD97706),
+                                accent: AppColors.warning,
                               ),
-                              _ModernSummaryCard(
+                              StatCard(
                                 width: cardWidth,
                                 title: 'Valeur du stock',
                                 value: formatMoneyByCurrency(
                                   inventory.totalStockValueByCurrency,
                                 ),
-                                subtitle: 'Valeur globale des articles',
                                 icon: Icons.account_balance_wallet_rounded,
-                                accent: const Color(0xFF15803D),
+                                accent: AppColors.success,
                               ),
                             ],
                           );
@@ -438,46 +441,29 @@ class _DashboardScreenState extends State<DashboardScreen> {
                         onRetry: _loadServiceVisits,
                       ),
                       const SizedBox(height: 28),
-                      Row(
-                        children: [
-                          Text(
-                            'Activites recentes',
-                            style: Theme.of(context).textTheme.titleLarge
-                                ?.copyWith(fontWeight: FontWeight.w800),
+                      SectionTitle(
+                        title: 'Activites recentes',
+                        trailing: Container(
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 10,
+                            vertical: 5,
                           ),
-                          const SizedBox(width: 10),
-                          Container(
-                            padding: const EdgeInsets.symmetric(
-                              horizontal: 10,
-                              vertical: 5,
-                            ),
-                            decoration: BoxDecoration(
-                              color: colorScheme.primaryContainer,
-                              borderRadius: BorderRadius.circular(999),
-                            ),
-                            child: Text(
-                              '${recent.length}',
-                              style: TextStyle(
-                                color: colorScheme.onPrimaryContainer,
-                                fontWeight: FontWeight.w700,
-                              ),
+                          decoration: BoxDecoration(
+                            color: AppColors.primary.withValues(alpha: 0.10),
+                            borderRadius: AppRadius.pillAll,
+                          ),
+                          child: Text(
+                            '${recent.length}',
+                            style: const TextStyle(
+                              color: AppColors.primary,
+                              fontWeight: FontWeight.w700,
                             ),
                           ),
-                        ],
+                        ),
                       ),
                       const SizedBox(height: 12),
-                      Container(
-                        decoration: BoxDecoration(
-                          color: colorScheme.surface,
-                          borderRadius: BorderRadius.circular(24),
-                          boxShadow: [
-                            BoxShadow(
-                              color: colorScheme.shadow.withValues(alpha: 0.08),
-                              blurRadius: 18,
-                              offset: Offset(0, 10),
-                            ),
-                          ],
-                        ),
+                      CustomCard(
+                        padding: EdgeInsets.zero,
                         child: recent.isEmpty
                             ? const Padding(
                                 padding: EdgeInsets.all(20),
@@ -610,21 +596,11 @@ class _VisitsChartCard extends StatelessWidget {
       return p.visits > max ? p.visits : max;
     });
 
-    return Container(
+    return SizedBox(
       width: double.infinity,
-      padding: const EdgeInsets.all(18),
-      decoration: BoxDecoration(
-        color: colorScheme.surface,
-        borderRadius: BorderRadius.circular(24),
-        boxShadow: [
-          BoxShadow(
-            color: colorScheme.shadow.withValues(alpha: 0.08),
-            blurRadius: 18,
-            offset: Offset(0, 10),
-          ),
-        ],
-      ),
-      child: Column(
+      child: CustomCard(
+        padding: const EdgeInsets.all(18),
+        child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Row(
@@ -780,6 +756,7 @@ class _VisitsChartCard extends StatelessWidget {
               ),
             ),
         ],
+        ),
       ),
     );
   }
@@ -808,21 +785,11 @@ class _SalesChartCard extends StatelessWidget {
       return p.amount > max ? p.amount : max;
     });
 
-    return Container(
+    return SizedBox(
       width: double.infinity,
-      padding: const EdgeInsets.all(18),
-      decoration: BoxDecoration(
-        color: colorScheme.surface,
-        borderRadius: BorderRadius.circular(24),
-        boxShadow: [
-          BoxShadow(
-            color: colorScheme.shadow.withValues(alpha: 0.08),
-            blurRadius: 18,
-            offset: Offset(0, 10),
-          ),
-        ],
-      ),
-      child: Column(
+      child: CustomCard(
+        padding: const EdgeInsets.all(18),
+        child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Row(
@@ -959,6 +926,7 @@ class _SalesChartCard extends StatelessWidget {
             ),
           ),
         ],
+        ),
       ),
     );
   }
@@ -1040,19 +1008,16 @@ class _DashboardHero extends StatelessWidget {
   Widget build(BuildContext context) {
     return Container(
       width: double.infinity,
-      padding: const EdgeInsets.all(22),
+      padding: const EdgeInsets.all(24),
       decoration: BoxDecoration(
-        borderRadius: BorderRadius.circular(30),
-        gradient: const LinearGradient(
-          colors: [Color(0xFF0C7EA5), Color(0xFF25B6C6)],
-          begin: Alignment.topLeft,
-          end: Alignment.bottomRight,
-        ),
-        boxShadow: const [
+        color: Colors.white,
+        borderRadius: AppRadius.cardAll,
+        border: Border.all(color: AppColors.border),
+        boxShadow: [
           BoxShadow(
-            color: Color(0x220C7EA5),
-            blurRadius: 28,
-            offset: Offset(0, 14),
+            color: Colors.black.withValues(alpha: 0.05),
+            blurRadius: 25,
+            offset: const Offset(0, 8),
           ),
         ],
       ),
@@ -1067,37 +1032,22 @@ class _DashboardHero extends StatelessWidget {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                const Text(
-                  'Dashboard inventaire',
-                  style: TextStyle(
-                    color: Colors.white,
-                    fontSize: 30,
-                    fontWeight: FontWeight.w800,
-                  ),
-                ),
+                Text('Dashboard inventaire', style: AppTypography.pageTitle()),
                 const SizedBox(height: 8),
-                const Text(
+                Text(
                   'Suivez vos stocks, detectez les alertes et pilotez les mouvements en temps reel.',
-                  style: TextStyle(color: Color(0xDDF5FBFF), height: 1.45),
+                  style: AppTypography.small(color: AppColors.textSecondary),
                 ),
-                const SizedBox(height: 12),
+                const SizedBox(height: 14),
                 _AnimatedCompanyName(name: companyName),
               ],
             ),
           ),
           if (onNewMovement != null)
-            FilledButton.icon(
+            CustomButton(
+              label: 'Nouveau mouvement',
+              icon: Icons.add_circle_outline,
               onPressed: onNewMovement,
-              style: FilledButton.styleFrom(
-                backgroundColor: Colors.white,
-                foregroundColor: const Color(0xFF0C7EA5),
-                padding: const EdgeInsets.symmetric(
-                  horizontal: 18,
-                  vertical: 14,
-                ),
-              ),
-              icon: const Icon(Icons.add_circle_outline),
-              label: const Text('Nouveau mouvement'),
             ),
         ],
       ),
@@ -1134,21 +1084,25 @@ class _AnimatedCompanyName extends StatelessWidget {
         key: ValueKey<String>(safeName),
         padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
         decoration: BoxDecoration(
-          color: Colors.white.withValues(alpha: 0.16),
-          borderRadius: BorderRadius.circular(999),
-          border: Border.all(color: Colors.white.withValues(alpha: 0.32)),
+          color: AppColors.primary.withValues(alpha: 0.08),
+          borderRadius: AppRadius.pillAll,
+          border: Border.all(color: AppColors.primary.withValues(alpha: 0.18)),
         ),
         child: Row(
           mainAxisSize: MainAxisSize.min,
           children: [
-            const Icon(Icons.apartment_rounded, color: Colors.white, size: 16),
+            const Icon(
+              Icons.apartment_rounded,
+              color: AppColors.primary,
+              size: 16,
+            ),
             const SizedBox(width: 8),
             Flexible(
               child: _LetterRevealText(
                 key: ValueKey<String>('reveal-$safeName'),
                 text: safeName,
                 style: const TextStyle(
-                  color: Colors.white,
+                  color: AppColors.primary,
                   fontWeight: FontWeight.w700,
                 ),
               ),
@@ -1189,90 +1143,6 @@ class _LetterRevealText extends StatelessWidget {
   }
 }
 
-/// Carte KPI style moderne.
-class _ModernSummaryCard extends StatelessWidget {
-  final double width;
-  final String title;
-  final String value;
-  final String subtitle;
-  final IconData icon;
-  final Color accent;
-
-  const _ModernSummaryCard({
-    required this.width,
-    required this.title,
-    required this.value,
-    required this.subtitle,
-    required this.icon,
-    required this.accent,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    final colorScheme = Theme.of(context).colorScheme;
-
-    return SizedBox(
-      width: width,
-      child: Container(
-        decoration: BoxDecoration(
-          color: colorScheme.surface,
-          borderRadius: BorderRadius.circular(24),
-          border: Border.all(color: accent.withValues(alpha: 0.18)),
-          boxShadow: [
-            BoxShadow(
-              color: colorScheme.shadow.withValues(alpha: 0.08),
-              blurRadius: 18,
-              offset: Offset(0, 10),
-            ),
-          ],
-        ),
-        child: Padding(
-          padding: const EdgeInsets.all(20),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                children: [
-                  Expanded(
-                    child: Text(
-                      title,
-                      style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                        color: colorScheme.onSurfaceVariant,
-                      ),
-                    ),
-                  ),
-                  CircleAvatar(
-                    radius: 18,
-                    backgroundColor: accent.withValues(alpha: 0.12),
-                    child: Icon(icon, color: accent),
-                  ),
-                ],
-              ),
-              const SizedBox(height: 16),
-              Text(
-                value,
-                style: Theme.of(context).textTheme.headlineSmall?.copyWith(
-                  fontWeight: FontWeight.w800,
-                  color: colorScheme.onSurface,
-                ),
-              ),
-              const SizedBox(height: 6),
-              Text(
-                subtitle,
-                style: TextStyle(
-                  color: colorScheme.onSurfaceVariant,
-                  height: 1.35,
-                ),
-              ),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
-}
-
 /// Ligne activite stylisee pour les mouvements de stock.
 class _ActivityTile extends StatelessWidget {
   final String productName;
@@ -1298,7 +1168,7 @@ class _ActivityTile extends StatelessWidget {
         : isExit
         ? 'Sortie'
         : 'Ajustement';
-    final color = isExit ? const Color(0xFFDC2626) : const Color(0xFF16A34A);
+    final color = isExit ? AppColors.danger : AppColors.success;
 
     return ListTile(
       contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),

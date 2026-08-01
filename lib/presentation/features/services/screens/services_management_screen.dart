@@ -1104,7 +1104,7 @@ class _CategoryFilterRow extends StatelessWidget {
     }
 
     return SizedBox(
-      height: 96,
+      height: 104,
       child: ListView.separated(
         scrollDirection: Axis.horizontal,
         itemCount: categories.length + 1,

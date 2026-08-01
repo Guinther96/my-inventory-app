@@ -163,6 +163,15 @@ class _ProductsScreenState extends State<ProductsScreen> {
                                       )
                                       ?.name ??
                                   'Sans categorie';
+                              // Un produit avec variantes n'a pas de stock
+                              // propre: on affiche la somme des stocks de ses
+                              // variantes plutot que Product.quantityInStock.
+                              final productVariants = inventory
+                                  .variantsForProduct(product.id);
+                              final stock = inventory.effectiveStock(product);
+                              final stockLabel = productVariants.isNotEmpty
+                                  ? 'Variantes: ${productVariants.length} (Stock total: $stock)'
+                                  : 'Stock: $stock';
 
                               return ListTile(
                                 contentPadding: const EdgeInsets.symmetric(
@@ -174,7 +183,7 @@ class _ProductsScreenState extends State<ProductsScreen> {
                                 ),
                                 title: Text(product.name),
                                 subtitle: Text(
-                                  '$categoryName • Stock: ${product.quantityInStock} • Prix: ${formatMoney(product.price, product.currency)}',
+                                  '$categoryName • $stockLabel • Prix: ${formatMoney(product.price, product.currency)}',
                                 ),
                                 trailing: Row(
                                   mainAxisSize: MainAxisSize.min,

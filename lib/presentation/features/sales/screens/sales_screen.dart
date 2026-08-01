@@ -5,6 +5,9 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
 // Imports des modèles de données
+import '../../../../core/theme/app_colors.dart';
+import '../../../../core/theme/app_radius.dart';
+import '../../../../core/theme/app_typography.dart';
 import '../../../../core/utils/currency.dart';
 import '../../../../data/models/category_model.dart';
 import '../../../../data/models/product_model.dart';
@@ -22,7 +25,12 @@ import '../../../../services/sales/sales_service.dart';
 
 // Imports des widgets communs (barre latérale, drawer)
 import '../../../common_widgets/app_drawer.dart';
+import '../../../common_widgets/app_search_field.dart';
 import '../../../common_widgets/app_sidebar.dart';
+import '../../../common_widgets/custom_card.dart';
+import '../../../common_widgets/product_card.dart';
+import '../../../common_widgets/stat_card.dart';
+import '../../../common_widgets/status_badge.dart';
 import '../widgets/product_detail_sheet.dart';
 
 /// Alias local pour l'affichage des sous-totaux par devise dans le POS.
@@ -1139,165 +1147,52 @@ class _PosHeader extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final isDarkMode = Theme.of(context).brightness == Brightness.dark;
-    final primaryColor = Theme.of(context).primaryColor;
-    return Container(
-      width: double.infinity,
-      padding: const EdgeInsets.all(20),
-      decoration: BoxDecoration(
-        borderRadius: BorderRadius.circular(28),
-        gradient: LinearGradient(
-          colors: isDarkMode
-              ? [
-                  Color.lerp(primaryColor, Color(0xFF000000), 0.3)!,
-                  Color.lerp(primaryColor, Color(0xFF000000), 0.1)!,
-                ]
-              : const [Color(0xFF0C7EA5), Color(0xFF25B6C6)],
-          begin: Alignment.topLeft,
-          end: Alignment.bottomRight,
-        ),
-        boxShadow: [
-          BoxShadow(
-            color: isDarkMode
-                ? primaryColor.withValues(alpha: 0.15)
-                : const Color(0x220C7EA5),
-            blurRadius: 24,
-            offset: const Offset(0, 12),
-          ),
-        ],
-      ),
-      // Layout flexible: titre + métriques côte à côte avec wrapping automatique
-      child: Wrap(
-        spacing: 16,
-        runSpacing: 16,
-        crossAxisAlignment: WrapCrossAlignment.center,
-        children: [
-          const SizedBox(width: 250, child: _HeaderIntro()),
-          // Métrique 1: Ventes du jour (nombre de tickets)
-          _HeaderMetric(
-            title: 'Ventes du jour',
-            value: todaySalesCount.toString(),
-            icon: Icons.receipt_long,
-          ),
-          // Métrique 2: Articles actuellement dans le panier
-          _HeaderMetric(
-            title: 'Articles panier',
-            value: totalItems.toString(),
-            icon: Icons.shopping_cart,
-          ),
-          // Métrique 3: Chiffre d'affaires généré aujourd'hui
-          _HeaderMetric(
-            title: 'CA du jour',
-            value: _formatCurrencyTotals(todayRevenueByCurrency),
-            icon: Icons.trending_up,
-          ),
-          // Métrique 4: Total du ticket courant (montant à payer)
-          _HeaderMetric(
-            title: 'Total ticket',
-            value: _formatCurrencyTotals(cartTotalsByCurrency),
-            icon: Icons.payments,
-            accent: Theme.of(context).colorScheme.secondary,
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-/// Affiche le titre introductif et la description de la section POS
-/// Partie textuelle gauche de l'en-tête (titre blanc grand + description grise)
-class _HeaderIntro extends StatelessWidget {
-  const _HeaderIntro();
-
-  @override
-  Widget build(BuildContext context) {
+    // En-tete plat (titre + sous-titre sur le fond de page) suivi d'une
+    // rangee de StatCard — remplace l'ancien bandeau degrade unique.
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        // Titre principal
-        const Text(
-          'Mode caisse',
-          style: TextStyle(
-            color: Colors.white,
-            fontSize: 28,
-            fontWeight: FontWeight.w800,
-          ),
-        ),
-        const SizedBox(height: 8),
-        // Description secondaire
+        Text('Mode caisse', style: AppTypography.pageTitle()),
+        const SizedBox(height: 6),
         Text(
           'Un ecran de vente rapide, visuel et adapte a votre gestion de stock.',
-          style: TextStyle(
-            color: Colors.white.withValues(alpha: 0.85),
-            height: 1.45,
-          ),
+          style: AppTypography.small(color: AppColors.textSecondary),
+        ),
+        const SizedBox(height: 18),
+        Wrap(
+          spacing: 16,
+          runSpacing: 16,
+          children: [
+            StatCard(
+              icon: Icons.receipt_long,
+              title: 'Ventes du jour',
+              value: todaySalesCount.toString(),
+              width: 220,
+            ),
+            StatCard(
+              icon: Icons.shopping_cart,
+              title: 'Articles panier',
+              value: totalItems.toString(),
+              accent: AppColors.success,
+              width: 220,
+            ),
+            StatCard(
+              icon: Icons.trending_up,
+              title: 'CA du jour',
+              value: _formatCurrencyTotals(todayRevenueByCurrency),
+              accent: AppColors.warning,
+              width: 220,
+            ),
+            StatCard(
+              icon: Icons.payments,
+              title: 'Total ticket',
+              value: _formatCurrencyTotals(cartTotalsByCurrency),
+              accent: Theme.of(context).colorScheme.secondary,
+              width: 220,
+            ),
+          ],
         ),
       ],
-    );
-  }
-}
-
-/// Affiche une métrique individuelle dans l'en-tête (chiffre + icône + libellé)
-/// Chaque métrique a un arrière-plan semi-transparent avec bordure légère
-/// Support de couleur d'accent customizable pour l'icône (blanc par défaut)
-class _HeaderMetric extends StatelessWidget {
-  final String title;
-  final String value;
-  final IconData icon;
-  final Color accent;
-
-  const _HeaderMetric({
-    required this.title,
-    required this.value,
-    required this.icon,
-    this.accent = Colors.white,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      constraints: const BoxConstraints(minWidth: 170),
-      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
-      // Fond semi-transparent avec bordure légère
-      decoration: BoxDecoration(
-        color: Colors.white.withValues(alpha: 0.14),
-        borderRadius: BorderRadius.circular(22),
-        border: Border.all(color: Colors.white.withValues(alpha: 0.1)),
-      ),
-      child: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          // Avatar circulaire avec icône colorée
-          CircleAvatar(
-            radius: 18,
-            backgroundColor: accent.withValues(alpha: 0.16),
-            child: Icon(icon, color: accent),
-          ),
-          const SizedBox(width: 12),
-          // Colonne avec valeur (grande) et libellé (petit)
-          Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              // Valeur grande et en gras (chiffre ou montant)
-              Text(
-                value,
-                style: const TextStyle(
-                  color: Colors.white,
-                  fontSize: 18,
-                  fontWeight: FontWeight.w800,
-                ),
-              ),
-              const SizedBox(height: 4),
-              // Libellé petit et grisé
-              Text(
-                title,
-                style: TextStyle(color: Colors.white.withValues(alpha: 0.85)),
-              ),
-            ],
-          ),
-        ],
-      ),
     );
   }
 }
@@ -1357,37 +1252,18 @@ class _TicketPanel extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final isDarkMode = Theme.of(context).brightness == Brightness.dark;
-    final card = Container(
-      decoration: BoxDecoration(
-        color: isDarkMode
-            ? Theme.of(context).scaffoldBackgroundColor
-            : Colors.white,
-        borderRadius: BorderRadius.circular(28),
-        boxShadow: [
-          BoxShadow(
-            color: isDarkMode
-                ? const Color(0x080D1B2A)
-                : const Color(0x140D1B2A),
-            blurRadius: 18,
-            offset: const Offset(0, 12),
-          ),
-        ],
-      ),
-      child: Padding(
-        padding: const EdgeInsets.all(18),
-        // Mode compact (mobile): pas de scrollable, juste une colonne
-        // Mode bureau: scrollable pour accommoder une longue liste d'articles
-        child: compact
-            ? Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: _buildSections(context, scrollable: false),
-              )
-            : Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: _buildSections(context, scrollable: true),
-              ),
-      ),
+    final card = CustomCard(
+      // Mode compact (mobile): pas de scrollable, juste une colonne
+      // Mode bureau: scrollable pour accommoder une longue liste d'articles
+      child: compact
+          ? Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: _buildSections(context, scrollable: false),
+            )
+          : Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: _buildSections(context, scrollable: true),
+            ),
     );
 
     // En mode compact, retourne la carte; en desktop, expand pourt remplir l'espace
@@ -1558,19 +1434,9 @@ class _TicketPanel extends StatelessWidget {
                   controller: notesController,
                   minLines: 1,
                   maxLines: 3,
-                  decoration: InputDecoration(
+                  decoration: const InputDecoration(
                     labelText: 'Note ticket',
                     hintText: 'Ex: vente comptoir, livraison, remise locale',
-                    filled: true,
-                    fillColor:
-                        Theme.of(context).inputDecorationTheme.fillColor ??
-                        (Theme.of(context).brightness == Brightness.dark
-                            ? Colors.grey.withValues(alpha: 0.1)
-                            : const Color(0xFFF6F8FB)),
-                    border: OutlineInputBorder(
-                      borderRadius: BorderRadius.circular(16),
-                      borderSide: BorderSide.none,
-                    ),
                   ),
                 ),
                 const SizedBox(height: 12),
@@ -1585,8 +1451,8 @@ class _TicketPanel extends StatelessWidget {
                   decoration: BoxDecoration(
                     color: Theme.of(context).brightness == Brightness.dark
                         ? Theme.of(context).cardColor
-                        : const Color(0xFF0F172A),
-                    borderRadius: BorderRadius.circular(22),
+                        : AppColors.textPrimary,
+                    borderRadius: AppRadius.cardAll,
                   ),
                   child: Column(
                     mainAxisSize: MainAxisSize.min,
@@ -1718,19 +1584,9 @@ class _TicketPanel extends StatelessWidget {
         controller: notesController,
         minLines: 1,
         maxLines: 3,
-        decoration: InputDecoration(
+        decoration: const InputDecoration(
           labelText: 'Note ticket',
           hintText: 'Ex: vente comptoir, livraison, remise locale',
-          filled: true,
-          fillColor:
-              Theme.of(context).inputDecorationTheme.fillColor ??
-              (Theme.of(context).brightness == Brightness.dark
-                  ? Colors.grey.withValues(alpha: 0.1)
-                  : const Color(0xFFF6F8FB)),
-          border: OutlineInputBorder(
-            borderRadius: BorderRadius.circular(16),
-            borderSide: BorderSide.none,
-          ),
         ),
       ),
       const SizedBox(height: 16),
@@ -1745,8 +1601,8 @@ class _TicketPanel extends StatelessWidget {
         decoration: BoxDecoration(
           color: Theme.of(context).brightness == Brightness.dark
               ? Theme.of(context).cardColor
-              : const Color(0xFF0F172A),
-          borderRadius: BorderRadius.circular(22),
+              : AppColors.textPrimary,
+          borderRadius: AppRadius.cardAll,
         ),
         child: Column(
           mainAxisSize: MainAxisSize.min,
@@ -1944,12 +1800,12 @@ class _EmptyCartState extends StatelessWidget {
       decoration: BoxDecoration(
         color: Theme.of(context).brightness == Brightness.dark
             ? Theme.of(context).cardColor
-            : const Color(0xFFF7F9FC),
-        borderRadius: BorderRadius.circular(22),
+            : AppColors.background,
+        borderRadius: AppRadius.cardAll,
         border: Border.all(
           color: Theme.of(context).brightness == Brightness.dark
               ? Colors.grey.withValues(alpha: 0.2)
-              : const Color(0xFFDCE6F2),
+              : AppColors.border,
         ),
       ),
       child: Column(
@@ -1958,7 +1814,7 @@ class _EmptyCartState extends StatelessWidget {
           const Icon(
             Icons.shopping_cart_outlined,
             size: 38,
-            color: Color(0xFF94A3B8),
+            color: AppColors.textSecondary,
           ),
           const SizedBox(height: 10),
           const Text(
@@ -2008,22 +1864,22 @@ class _CartEntryTile extends StatelessWidget {
         ? Theme.of(context).primaryColor
         : (isDarkMode
               ? Colors.grey.withValues(alpha: 0.2)
-              : const Color(0xFFDCE6F2));
+              : AppColors.border);
     final bgColor = selected
         ? Theme.of(context).primaryColor.withValues(alpha: 0.08)
         : (isDarkMode
               ? Colors.grey.withValues(alpha: 0.05)
-              : const Color(0xFFF9FBFD));
+              : AppColors.background);
 
     return InkWell(
-      borderRadius: BorderRadius.circular(22),
+      borderRadius: AppRadius.cardAll,
       onTap: onTap,
       child: AnimatedContainer(
         duration: const Duration(milliseconds: 180),
         padding: const EdgeInsets.all(14),
         decoration: BoxDecoration(
           color: bgColor,
-          borderRadius: BorderRadius.circular(22),
+          borderRadius: AppRadius.cardAll,
           border: Border.all(color: borderColor, width: selected ? 1.6 : 1),
         ),
         child: Column(
@@ -2102,7 +1958,7 @@ class _CartEntryTile extends StatelessWidget {
                     fontWeight: FontWeight.w800,
                     color: Theme.of(context).brightness == Brightness.dark
                         ? Colors.white
-                        : const Color(0xFF0F172A),
+                        : AppColors.textPrimary,
                   ),
                 ),
               ],
@@ -2130,9 +1986,9 @@ class _SquareIconButton extends StatelessWidget {
         onPressed: onPressed,
         style: OutlinedButton.styleFrom(
           padding: EdgeInsets.zero,
-          side: const BorderSide(color: Color(0xFFD1D9E6)),
+          side: const BorderSide(color: AppColors.border),
           shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(12),
+            borderRadius: BorderRadius.circular(AppRadius.sm),
           ),
         ),
         child: Icon(icon, size: 16),
@@ -2159,8 +2015,8 @@ class _QuickQuantityPanel extends StatelessWidget {
       width: double.infinity,
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
-        color: const Color(0xFFF6FAFC),
-        borderRadius: BorderRadius.circular(20),
+        color: AppColors.background,
+        borderRadius: AppRadius.cardAll,
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -2180,7 +2036,7 @@ class _QuickQuantityPanel extends StatelessWidget {
             selectedEntry == null
                 ? 'Selectionnez une ligne du panier pour ajuster sa quantite.'
                 : 'Stock dispo: ${selectedEntry!.maxStock}',
-            style: const TextStyle(color: Color(0xFF617287)),
+            style: const TextStyle(color: AppColors.textSecondary),
           ),
           const SizedBox(height: 12),
           // Chips pour quantités rapides: x1, x2, x3, x5, x10
@@ -2249,8 +2105,8 @@ class _SelectedProductBottomBar extends StatelessWidget {
           ],
         ),
         child: Material(
-          color: const Color(0xFF0F172A),
-          borderRadius: BorderRadius.circular(16),
+          color: AppColors.textPrimary,
+          borderRadius: AppRadius.buttonAll,
           child: InkWell(
             onTap: onTapTicket,
             borderRadius: BorderRadius.circular(16),
@@ -2629,22 +2485,10 @@ class _CatalogToolbar extends StatelessWidget {
       currentParentId = selectedAtLevel;
     }
 
-    return Container(
+    return SizedBox(
       width: double.infinity,
-      padding: const EdgeInsets.all(18),
-      // Carte blanche avec ombre légère
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(28),
-        boxShadow: const [
-          BoxShadow(
-            color: Color(0x100D1B2A),
-            blurRadius: 18,
-            offset: Offset(0, 10),
-          ),
-        ],
-      ),
-      child: Column(
+      child: CustomCard(
+        child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           // En-tête: titre + compteur
@@ -2654,17 +2498,16 @@ class _CatalogToolbar extends StatelessWidget {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Text(
-                      'Catalogue produits',
-                      style: TextStyle(
+                    Text('Catalogue produits', style: TextStyle(
                         fontSize: 20,
                         fontWeight: FontWeight.w800,
+                        color: AppColors.textPrimary,
                       ),
                     ),
                     SizedBox(height: 4),
                     Text(
                       'Touchez une carte produit pour l ajouter au panier.',
-                      style: TextStyle(color: Color(0xFF617287)),
+                      style: TextStyle(color: AppColors.textSecondary),
                     ),
                   ],
                 ),
@@ -2676,13 +2519,13 @@ class _CatalogToolbar extends StatelessWidget {
                   vertical: 10,
                 ),
                 decoration: BoxDecoration(
-                  color: Theme.of(context).primaryColor.withValues(alpha: 0.1),
-                  borderRadius: BorderRadius.circular(18),
+                  color: AppColors.primary.withValues(alpha: 0.10),
+                  borderRadius: AppRadius.pillAll,
                 ),
                 child: Text(
                   '$productsCount produits',
-                  style: TextStyle(
-                    color: Theme.of(context).primaryColor,
+                  style: const TextStyle(
+                    color: AppColors.primary,
                     fontWeight: FontWeight.w700,
                   ),
                 ),
@@ -2691,28 +2534,16 @@ class _CatalogToolbar extends StatelessWidget {
           ),
           const SizedBox(height: 16),
           // Champ de recherche textuelle
-          TextField(
+          AppSearchField(
+            hint: 'Rechercher par nom, code-barres ou description',
             onChanged: onSearchChanged,
-            decoration: InputDecoration(
-              hintText: 'Rechercher par nom, code-barres ou description',
-              prefixIcon: const Icon(Icons.search),
-              filled: true,
-              fillColor:
-                  Theme.of(context).inputDecorationTheme.fillColor ??
-                  (Theme.of(context).brightness == Brightness.dark
-                      ? Colors.grey.withValues(alpha: 0.1)
-                      : const Color(0xFFF6F8FB)),
-              border: OutlineInputBorder(
-                borderRadius: BorderRadius.circular(18),
-                borderSide: BorderSide.none,
-              ),
-            ),
           ),
           const SizedBox(height: 14),
           // Une rangée de chips par niveau de catégories (racine, puis chaque
           // niveau de sous-catégories tant qu'il y a des enfants à afficher).
           ...levelRows,
         ],
+        ),
       ),
     );
   }
@@ -2764,9 +2595,7 @@ class _ProductGrid extends StatelessWidget {
               // disponible est la somme des stocks de ses variantes.
               final productVariants = inventory.variantsForProduct(product.id);
               final hasVariants = productVariants.isNotEmpty;
-              final availableStock = hasVariants
-                  ? productVariants.fold<int>(0, (sum, v) => sum + v.stock)
-                  : product.quantityInStock;
+              final availableStock = inventory.effectiveStock(product);
 
               return _ProductTile(
                 product: product,
@@ -2786,23 +2615,8 @@ class _ProductGrid extends StatelessWidget {
     }
 
     return Expanded(
-      child: Container(
+      child: CustomCard(
         padding: const EdgeInsets.all(18),
-        decoration: BoxDecoration(
-          color: Theme.of(context).brightness == Brightness.dark
-              ? Theme.of(context).scaffoldBackgroundColor
-              : Colors.white,
-          borderRadius: BorderRadius.circular(28),
-          boxShadow: [
-            BoxShadow(
-              color: Theme.of(context).brightness == Brightness.dark
-                  ? const Color(0x080D1B2A)
-                  : const Color(0x100D1B2A),
-              blurRadius: 18,
-              offset: const Offset(0, 10),
-            ),
-          ],
-        ),
         child: grid,
       ),
     );
@@ -2816,42 +2630,34 @@ class _EmptyCatalogState extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Container(
+    return SizedBox(
       width: double.infinity,
-      padding: const EdgeInsets.all(28),
-      decoration: BoxDecoration(
-        color: Theme.of(context).brightness == Brightness.dark
-            ? Theme.of(context).cardColor
-            : Colors.white,
-        borderRadius: BorderRadius.circular(28),
-      ),
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          // Icône de catalogue vide
-          const Icon(
-            Icons.inventory_2_outlined,
-            size: 40,
-            color: Color(0xFF94A3B8),
-          ),
-          const SizedBox(height: 12),
-          // Message d'état vide
-          const Text(
-            'Aucun produit a afficher',
-            style: TextStyle(fontWeight: FontWeight.w700),
-          ),
-          const SizedBox(height: 4),
-          // Suggestion d'action
-          Text(
-            'Essayez une autre recherche ou une autre categorie.',
-            textAlign: TextAlign.center,
-            style: TextStyle(
-              color: Theme.of(
-                context,
-              ).textTheme.bodyMedium?.color?.withValues(alpha: 0.7),
+      child: CustomCard(
+        padding: const EdgeInsets.all(28),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            // Icône de catalogue vide
+            const Icon(
+              Icons.inventory_2_outlined,
+              size: 40,
+              color: AppColors.textSecondary,
             ),
-          ),
-        ],
+            const SizedBox(height: 12),
+            // Message d'état vide
+            const Text(
+              'Aucun produit a afficher',
+              style: TextStyle(fontWeight: FontWeight.w700),
+            ),
+            const SizedBox(height: 4),
+            // Suggestion d'action
+            const Text(
+              'Essayez une autre recherche ou une autre categorie.',
+              textAlign: TextAlign.center,
+              style: TextStyle(color: AppColors.textSecondary),
+            ),
+          ],
+        ),
       ),
     );
   }
@@ -2884,154 +2690,20 @@ class _ProductTile extends StatelessWidget {
     final isLowStock =
         !isOutOfStock && availableStock <= product.minStockAlert;
 
-    return InkWell(
-      borderRadius: BorderRadius.circular(24),
-      onTap: onAdd,
-      child: Ink(
-        decoration: BoxDecoration(
-          color: Colors.white,
-          borderRadius: BorderRadius.circular(24),
-          border: Border.all(color: const Color(0xFFE2E8F0)),
-          boxShadow: const [
-            BoxShadow(
-              color: Color(0x120D1B2A),
-              blurRadius: 16,
-              offset: Offset(0, 10),
-            ),
-          ],
-        ),
-        child: Padding(
-          padding: const EdgeInsets.all(14),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              // En-tête: catégorie + badge de stock
-              Row(
-                children: [
-                  // Nom de la catégorie
-                  Expanded(
-                    child: Text(
-                      categoryName,
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      style: const TextStyle(
-                        color: Color(0xFF617287),
-                        fontWeight: FontWeight.w600,
-                      ),
-                    ),
-                  ),
-                  // Badge coloré d'état de stock
-                  _StockBadge(
-                    label: isOutOfStock
-                        ? 'Rupture'
-                        : isLowStock
-                        ? 'Bas'
-                        : 'OK',
-                    color: isOutOfStock
-                        ? Theme.of(context).colorScheme.error
-                        : isLowStock
-                        ? Colors.orange
-                        : Colors.green,
-                  ),
-                ],
-              ),
-              const SizedBox(height: 10),
-              // Image du produit
-              Expanded(
-                child: Center(child: _ProductThumb(product: product, size: 92)),
-              ),
-              const SizedBox(height: 10),
-              // Nom du produit
-              Text(
-                product.name,
-                maxLines: 2,
-                overflow: TextOverflow.ellipsis,
-                style: const TextStyle(
-                  fontSize: 16,
-                  fontWeight: FontWeight.w800,
-                  height: 1.25,
-                ),
-              ),
-              const SizedBox(height: 8),
-              // Quantité en stock (somme des variantes le cas échéant)
-              Row(
-                children: [
-                  Text(
-                    'Stock: $availableStock',
-                    style: const TextStyle(color: Color(0xFF617287)),
-                  ),
-                  if (hasVariants) ...[
-                    const SizedBox(width: 6),
-                    const Icon(Icons.tune, size: 14, color: Color(0xFF617287)),
-                  ],
-                ],
-              ),
-              const SizedBox(height: 10),
-              // Pied: prix + bouton ajouter
-              Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  // Prix unitaire (ou "plusieurs options" si le prix varie par variante)
-                  Text(
-                    hasVariants
-                        ? 'Plusieurs options'
-                        : formatMoney(product.price, product.currency),
-                    style: const TextStyle(
-                      fontSize: 18,
-                      fontWeight: FontWeight.w800,
-                      color: Color(0xFF0F172A),
-                    ),
-                  ),
-                  const SizedBox(height: 8),
-                  // Bouton ajouter / voir options (désactivé en rupture de stock)
-                  SizedBox(
-                    width: double.infinity,
-                    child: FilledButton(
-                      onPressed: onAdd,
-                      style: FilledButton.styleFrom(
-                        backgroundColor: isOutOfStock
-                            ? Colors.grey.withValues(alpha: 0.5)
-                            : Theme.of(context).primaryColor,
-                        foregroundColor: Colors.white,
-                        padding: const EdgeInsets.symmetric(
-                          horizontal: 12,
-                          vertical: 10,
-                        ),
-                      ),
-                      child: Text(hasVariants ? 'Voir les options' : 'Ajouter'),
-                    ),
-                  ),
-                ],
-              ),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
-}
-
-/// Petit badge coloré affichant le statut du stock (OK/Bas/Rupture)
-/// Couleurs: vert (OK), orange (Bas), rouge (Rupture)
-class _StockBadge extends StatelessWidget {
-  final String label;
-  final Color color;
-
-  const _StockBadge({required this.label, required this.color});
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-      decoration: BoxDecoration(
-        color: color.withValues(alpha: 0.12),
-        borderRadius: BorderRadius.circular(999),
-      ),
-      // Texte coloré correspondant au statut
-      child: Text(
-        label,
-        style: TextStyle(color: color, fontWeight: FontWeight.w700),
-      ),
+    return ProductCard(
+      image: _ProductThumb(product: product, size: 92),
+      name: product.name,
+      categoryName: categoryName,
+      stockLabel: hasVariants ? 'Stock: $availableStock · variantes' : 'Stock: $availableStock',
+      priceLabel: hasVariants
+          ? 'Plusieurs options'
+          : formatMoney(product.price, product.currency),
+      badgeLabel: isOutOfStock ? 'Rupture' : (isLowStock ? 'Bas' : 'OK'),
+      badgeType: isOutOfStock
+          ? StatusBadgeType.danger
+          : (isLowStock ? StatusBadgeType.warning : StatusBadgeType.success),
+      actionLabel: hasVariants ? 'Voir les options' : 'Ajouter',
+      onAdd: onAdd,
     );
   }
 }
