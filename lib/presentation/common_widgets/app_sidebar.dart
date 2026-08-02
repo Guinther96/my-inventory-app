@@ -2,7 +2,6 @@ import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:provider/provider.dart';
 
-import '../../core/theme/app_colors.dart';
 import '../../data/providers/feature_access_provider.dart';
 import '../../data/providers/user_profile_provider.dart';
 import '../features/reports/screens/user_roles_screen.dart';
@@ -23,6 +22,7 @@ class AppSidebar extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final colorScheme = Theme.of(context).colorScheme;
     final currentRoute = GoRouterState.of(context).uri.toString();
     final profile = context.watch<UserProfileProvider>();
     final featureAccess = context.watch<FeatureAccessProvider>();
@@ -32,8 +32,8 @@ class AppSidebar extends StatelessWidget {
     return Container(
       width: 250,
       decoration: BoxDecoration(
-        color: Colors.white,
-        border: Border(right: BorderSide(color: AppColors.border)),
+        color: colorScheme.surface,
+        border: Border(right: BorderSide(color: colorScheme.outlineVariant)),
       ),
       child: SafeArea(
         child: Column(
@@ -46,7 +46,7 @@ class AppSidebar extends StatelessWidget {
                     width: 36,
                     height: 36,
                     decoration: BoxDecoration(
-                      color: AppColors.primary,
+                      color: colorScheme.primary,
                       borderRadius: BorderRadius.circular(10),
                     ),
                     alignment: Alignment.center,
@@ -66,7 +66,7 @@ class AppSidebar extends StatelessWidget {
                           style: TextStyle(
                             fontSize: 17,
                             fontWeight: FontWeight.w700,
-                            color: AppColors.textPrimary,
+                            color: colorScheme.onSurface,
                           ),
                         ),
                         Text(
@@ -74,7 +74,7 @@ class AppSidebar extends StatelessWidget {
                           style: TextStyle(
                             fontSize: 11,
                             fontWeight: FontWeight.w500,
-                            color: AppColors.textSecondary,
+                            color: colorScheme.onSurfaceVariant,
                           ),
                         ),
                       ],
@@ -93,7 +93,7 @@ class AppSidebar extends StatelessWidget {
                       fontSize: 11,
                       fontWeight: FontWeight.w700,
                       letterSpacing: 0.6,
-                      color: AppColors.textSecondary.withValues(alpha: 0.8),
+                      color: colorScheme.onSurfaceVariant.withValues(alpha: 0.8),
                     ),
                   ),
                 ],
@@ -234,6 +234,7 @@ class _SidebarUserFooter extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final colorScheme = Theme.of(context).colorScheme;
     final email = profile.profile?.email ?? '';
     final initial = email.isNotEmpty ? email[0].toUpperCase() : '?';
     final roleLabel = profile.isManager
@@ -246,19 +247,19 @@ class _SidebarUserFooter extends StatelessWidget {
       margin: const EdgeInsets.fromLTRB(12, 4, 12, 12),
       padding: const EdgeInsets.all(10),
       decoration: BoxDecoration(
-        color: const Color(0xFFF8FAFC),
+        color: colorScheme.surfaceContainerHighest,
         borderRadius: BorderRadius.circular(14),
-        border: Border.all(color: AppColors.border),
+        border: Border.all(color: colorScheme.outlineVariant),
       ),
       child: Row(
         children: [
           CircleAvatar(
             radius: 16,
-            backgroundColor: AppColors.primary.withValues(alpha: 0.12),
+            backgroundColor: colorScheme.primary.withValues(alpha: 0.12),
             child: Text(
               initial,
-              style: const TextStyle(
-                color: AppColors.primary,
+              style: TextStyle(
+                color: colorScheme.primary,
                 fontWeight: FontWeight.w700,
                 fontSize: 13,
               ),
@@ -273,27 +274,27 @@ class _SidebarUserFooter extends StatelessWidget {
                   email.isEmpty ? 'Utilisateur' : email,
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
-                  style: const TextStyle(
+                  style: TextStyle(
                     fontSize: 13,
                     fontWeight: FontWeight.w600,
-                    color: AppColors.textPrimary,
+                    color: colorScheme.onSurface,
                   ),
                 ),
                 Text(
                   roleLabel,
-                  style: const TextStyle(
+                  style: TextStyle(
                     fontSize: 11,
                     fontWeight: FontWeight.w500,
-                    color: AppColors.textSecondary,
+                    color: colorScheme.onSurfaceVariant,
                   ),
                 ),
               ],
             ),
           ),
-          const Icon(
+          Icon(
             Icons.chevron_right,
             size: 18,
-            color: AppColors.textSecondary,
+            color: colorScheme.onSurfaceVariant,
           ),
         ],
       ),

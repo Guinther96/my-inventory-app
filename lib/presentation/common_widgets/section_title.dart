@@ -1,6 +1,5 @@
 import 'package:flutter/material.dart';
 
-import '../../core/theme/app_colors.dart';
 import '../../core/theme/app_typography.dart';
 
 /// En-tete de section standard (titre 22/700 + sous-titre optionnel 14),
@@ -26,13 +25,10 @@ class SectionTitle extends StatelessWidget {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Text(title, style: AppTypography.sectionTitle()),
+              Text(title, style: AppTypography.sectionTitle(context)),
               if (subtitle != null) ...[
                 const SizedBox(height: 4),
-                Text(
-                  subtitle!,
-                  style: AppTypography.small(color: AppColors.textSecondary),
-                ),
+                Text(subtitle!, style: AppTypography.small(context)),
               ],
             ],
           ),

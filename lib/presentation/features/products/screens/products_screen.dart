@@ -243,6 +243,21 @@ class _ProductsScreenState extends State<ProductsScreen> {
     return byKey.values.toList();
   }
 
+  /// Traduit les erreurs techniques les plus frequentes (contraintes
+  /// Postgres) en message comprehensible, plutot que d'afficher le dump
+  /// PostgrestException brut a l'utilisateur.
+  String _friendlySaveError(Object error) {
+    final raw = error.toString();
+    if (raw.contains('violates foreign key constraint') &&
+        raw.contains('category')) {
+      return 'La categorie choisie n\'est plus valide. Reessayez avec une autre categorie.';
+    }
+    if (raw.contains('duplicate key value violates unique constraint')) {
+      return 'Un produit avec ces informations existe deja.';
+    }
+    return raw.replaceFirst('Exception: ', '');
+  }
+
   Future<void> _openProductDialog(
     BuildContext context, {
     Product? product,
@@ -414,18 +429,27 @@ class _ProductsScreenState extends State<ProductsScreen> {
                         const SizedBox(height: 8),
                         DropdownButtonFormField<String?>(
                           value: selectedCategoryId,
+                          isExpanded: true,
                           decoration: const InputDecoration(
                             labelText: 'Categorie',
                           ),
                           items: [
                             const DropdownMenuItem<String?>(
                               value: null,
-                              child: Text('Sans categorie'),
+                              child: Text(
+                                'Sans categorie',
+                                overflow: TextOverflow.ellipsis,
+                                maxLines: 1,
+                              ),
                             ),
                             ...inventory.categories.map(
                               (c) => DropdownMenuItem<String?>(
                                 value: c.id,
-                                child: Text(c.name),
+                                child: Text(
+                                  c.name,
+                                  overflow: TextOverflow.ellipsis,
+                                  maxLines: 1,
+                                ),
                               ),
                             ),
                           ],
@@ -479,10 +503,44 @@ class _ProductsScreenState extends State<ProductsScreen> {
                                       ) ??
                                       5;
 
+                                  // Garde-fou: une categorie peut avoir ete
+                                  // supprimee/fusionnee entre l'ouverture du
+                                  // dialogue et l'enregistrement (ou provenir
+                                  // d'une ancienne donnee orpheline). Envoyer
+                                  // un category_id qui n'existe plus ferait
+                                  // echouer la sauvegarde du produit entier
+                                  // avec une erreur de contrainte de cle
+                                  // etrangere: on retombe sur "Sans
+                                  // categorie" plutot que de bloquer.
+                                  final categoryStillExists =
+                                      selectedCategoryId != null &&
+                                      inventory.categories.any(
+                                        (c) => c.id == selectedCategoryId,
+                                      );
+                                  if (selectedCategoryId != null &&
+                                      !categoryStillExists) {
+                                    setDialogState(
+                                      () => selectedCategoryId = null,
+                                    );
+                                    if (context.mounted) {
+                                      ScaffoldMessenger.of(
+                                        context,
+                                      ).showSnackBar(
+                                        const SnackBar(
+                                          content: Text(
+                                            'La categorie selectionnee n\'existe plus: le produit sera enregistre sans categorie.',
+                                          ),
+                                        ),
+                                      );
+                                    }
+                                  }
+
                                   final now = DateTime.now();
                                   final productToSave = Product(
                                     id: product?.id ?? '',
-                                    categoryId: selectedCategoryId,
+                                    categoryId: categoryStillExists
+                                        ? selectedCategoryId
+                                        : null,
                                     name: name,
                                     description:
                                         descriptionController.text
@@ -515,15 +573,14 @@ class _ProductsScreenState extends State<ProductsScreen> {
                                     }
                                   } catch (e) {
                                     if (context.mounted) {
-                                      final rawMessage = e.toString();
-                                      final message = rawMessage.replaceFirst(
-                                        'Exception: ',
-                                        '',
-                                      );
                                       ScaffoldMessenger.of(
                                         context,
                                       ).showSnackBar(
-                                        SnackBar(content: Text(message)),
+                                        SnackBar(
+                                          content: Text(
+                                            _friendlySaveError(e),
+                                          ),
+                                        ),
                                       );
                                     }
                                   }

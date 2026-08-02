@@ -23,12 +23,18 @@ class AppTheme {
     // exactes plutot que de laisser l'algorithme de teinte les approximer.
     final colorScheme =
         ColorScheme.fromSeed(
-          seedColor: AppColors.primary,
+          seedColor: isDark ? AppColors.primaryDark : AppColors.primary,
           brightness: brightness,
         ).copyWith(
-          primary: AppColors.primary,
+          primary: isDark ? AppColors.primaryDark : AppColors.primary,
           onPrimary: Colors.white,
           surface: isDark ? AppColors.cardDark : AppColors.card,
+          // Fond "secondaire" (un cran au-dessus de surface): utilise pour les
+          // panneaux/pastilles qui doivent se distinguer legerement d'une carte
+          // (footer sidebar, chips, champs de formulaire).
+          surfaceContainerHighest: isDark
+              ? AppColors.secondarySurfaceDark
+              : const Color(0xFFF1F5F9),
           onSurface: isDark ? AppColors.textPrimaryDark : AppColors.textPrimary,
           onSurfaceVariant: isDark
               ? AppColors.textSecondaryDark
@@ -47,9 +53,7 @@ class AppTheme {
       displayColor: colorScheme.onSurface,
     );
 
-    final fillColor = isDark
-        ? AppColors.backgroundDark.withValues(alpha: 0.6)
-        : const Color(0xFFF1F5F9); // gris tres clair, cf. spec formulaires
+    final fillColor = colorScheme.surfaceContainerHighest;
 
     return ThemeData(
       useMaterial3: true,
@@ -100,10 +104,12 @@ class AppTheme {
             fontWeight: FontWeight.w600,
           ),
         ).copyWith(
+          // Survol/pression: overlay teinte de la primary courante (adapte au
+          // theme) plutot qu'un hover fixe pense pour le mode clair.
           overlayColor: WidgetStateProperty.resolveWith(
             (states) => states.contains(WidgetState.hovered) ||
                     states.contains(WidgetState.pressed)
-                ? AppColors.primaryHover.withValues(alpha: 0.12)
+                ? colorScheme.primary.withValues(alpha: 0.12)
                 : null,
           ),
         ),
@@ -155,9 +161,7 @@ class AppTheme {
         ),
       ),
       chipTheme: ChipThemeData(
-        backgroundColor: isDark
-            ? Colors.white.withValues(alpha: 0.06)
-            : const Color(0xFFF1F5F9),
+        backgroundColor: colorScheme.surfaceContainerHighest,
         selectedColor: colorScheme.primary.withValues(alpha: 0.12),
         labelStyle: GoogleFonts.inter(
           fontSize: 13,

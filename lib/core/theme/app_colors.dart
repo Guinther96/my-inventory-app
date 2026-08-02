@@ -20,11 +20,20 @@ class AppColors {
   static const Color warning = Color(0xFFF59E0B);
   static const Color danger = Color(0xFFEF4444);
 
-  // Variante sombre: mêmes rôles sémantiques, valeurs adaptées pour rester
-  // lisibles sur fond sombre sans dénaturer l'identité de marque.
-  static const Color backgroundDark = Color(0xFF0F1720);
-  static const Color cardDark = Color(0xFF17212C);
-  static const Color borderDark = Color(0xFF2A3543);
-  static const Color textPrimaryDark = Color(0xFFF1F5F9);
-  static const Color textSecondaryDark = Color(0xFF94A3B8);
+  // Gris "neutre" utilise pour une tendance stable (ni hausse ni baisse) -
+  // identique en clair et en sombre.
+  static const Color neutral = Color(0xFF94A3B8);
+
+  // Variante sombre: palette dediee (pas un simple inverse du clair), pour
+  // un vrai theme sombre professionnel plutot qu'un negatif de l'existant.
+  static const Color backgroundDark = Color(0xFF0F172A);
+  static const Color surfaceDark = Color(0xFF111827);
+  static const Color cardDark = Color(0xFF1E293B);
+  static const Color secondarySurfaceDark = Color(0xFF273449);
+  static const Color borderDark = Color(0xFF334155);
+  static const Color dividerDark = Color(0xFF334155);
+  static const Color primaryDark = Color(0xFF3B82F6);
+  static const Color textPrimaryDark = Color(0xFFF8FAFC);
+  static const Color textSecondaryDark = Color(0xFFCBD5E1);
+  static const Color hintDark = Color(0xFF94A3B8);
 }

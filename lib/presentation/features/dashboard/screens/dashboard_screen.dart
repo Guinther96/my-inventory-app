@@ -307,6 +307,164 @@ class _DashboardScreenState extends State<DashboardScreen> {
         .toList();
   }
 
+  /// Stats agregees d'une seule journee (mouvements de sortie uniquement):
+  /// nombre de lignes vendues, quantite totale, CA par devise.
+  ({int salesCount, int unitsSold, Map<String, double> revenueByCurrency})
+  _dayStats(InventoryProvider inventory, DateTime day) {
+    var salesCount = 0;
+    var unitsSold = 0;
+    final revenueByCurrency = <String, double>{};
+
+    for (final movement in inventory.movements) {
+      if (movement.movementType != 'exit') {
+        continue;
+      }
+      final createdAt = movement.createdAt;
+      if (createdAt.year != day.year ||
+          createdAt.month != day.month ||
+          createdAt.day != day.day) {
+        continue;
+      }
+
+      salesCount++;
+      unitsSold += movement.quantity;
+
+      final product = inventory.findProductById(movement.productId);
+      final unitPrice = movement.unitPrice ?? product?.price ?? 0;
+      final currency = normalizeCurrencyCode(
+        movement.productCurrency ?? product?.currency,
+      );
+      revenueByCurrency.update(
+        currency,
+        (value) => value + (unitPrice * movement.quantity),
+        ifAbsent: () => unitPrice * movement.quantity,
+      );
+    }
+
+    return (
+      salesCount: salesCount,
+      unitsSold: unitsSold,
+      revenueByCurrency: revenueByCurrency,
+    );
+  }
+
+  /// Variation en % entre aujourd'hui et hier. Null si hier vaut 0 (pas de
+  /// base de comparaison fiable pour un pourcentage), sauf si les deux
+  /// valent 0 (stable a 0%, une comparaison valide).
+  double? _trendPercent(num today, num yesterday) {
+    if (yesterday == 0) {
+      return today == 0 ? 0 : null;
+    }
+    return ((today - yesterday) / yesterday) * 100;
+  }
+
+  /// Somme toutes devises confondues (meme simplification que le graphique
+  /// des ventes existant _buildSalesSeries) - usage interne pour la
+  /// tendance/sparkline uniquement, jamais pour un montant affiche.
+  double _totalRevenue(Map<String, double> revenueByCurrency) =>
+      revenueByCurrency.values.fold(0.0, (sum, v) => sum + v);
+
+  /// Unites vendues par jour sur la fenetre, pour la sparkline "Articles
+  /// vendus".
+  List<double> _unitsSoldSeries(
+    InventoryProvider inventory, {
+    required int days,
+  }) {
+    final now = DateTime.now();
+    final firstDay = DateTime(
+      now.year,
+      now.month,
+      now.day,
+    ).subtract(Duration(days: days - 1));
+    final totalsByDay = <DateTime, int>{
+      for (var i = 0; i < days; i++) firstDay.add(Duration(days: i)): 0,
+    };
+    for (final movement in inventory.movements) {
+      if (movement.movementType != 'exit') {
+        continue;
+      }
+      final day = DateTime(
+        movement.createdAt.year,
+        movement.createdAt.month,
+        movement.createdAt.day,
+      );
+      if (!totalsByDay.containsKey(day)) {
+        continue;
+      }
+      totalsByDay[day] = (totalsByDay[day] ?? 0) + movement.quantity;
+    }
+    return totalsByDay.values.map((v) => v.toDouble()).toList();
+  }
+
+  /// Lignes vendues par jour sur la fenetre, pour la sparkline "Ventes du
+  /// jour".
+  List<double> _salesCountSeries(
+    InventoryProvider inventory, {
+    required int days,
+  }) {
+    final now = DateTime.now();
+    final firstDay = DateTime(
+      now.year,
+      now.month,
+      now.day,
+    ).subtract(Duration(days: days - 1));
+    final totalsByDay = <DateTime, int>{
+      for (var i = 0; i < days; i++) firstDay.add(Duration(days: i)): 0,
+    };
+    for (final movement in inventory.movements) {
+      if (movement.movementType != 'exit') {
+        continue;
+      }
+      final day = DateTime(
+        movement.createdAt.year,
+        movement.createdAt.month,
+        movement.createdAt.day,
+      );
+      if (!totalsByDay.containsKey(day)) {
+        continue;
+      }
+      totalsByDay[day] = (totalsByDay[day] ?? 0) + 1;
+    }
+    return totalsByDay.values.map((v) => v.toDouble()).toList();
+  }
+
+  /// Produit le plus vendu (toutes les donnees de mouvements chargees), en
+  /// quantite ecoulee.
+  ({String name, int quantity})? _bestSeller(InventoryProvider inventory) {
+    final totalsByProduct = <String, int>{};
+    for (final movement in inventory.movements) {
+      if (movement.movementType != 'exit') {
+        continue;
+      }
+      totalsByProduct.update(
+        movement.productId,
+        (value) => value + movement.quantity,
+        ifAbsent: () => movement.quantity,
+      );
+    }
+    if (totalsByProduct.isEmpty) {
+      return null;
+    }
+    final top = totalsByProduct.entries.reduce(
+      (a, b) => a.value >= b.value ? a : b,
+    );
+    return (name: inventory.productNameFor(top.key), quantity: top.value);
+  }
+
+  /// Dernier mouvement de sortie (vente) enregistre, le plus recent.
+  StockMovement? _lastSale(InventoryProvider inventory) {
+    StockMovement? last;
+    for (final movement in inventory.movements) {
+      if (movement.movementType != 'exit') {
+        continue;
+      }
+      if (last == null || movement.createdAt.isAfter(last.createdAt)) {
+        last = movement;
+      }
+    }
+    return last;
+  }
+
   String _movementDropdownKey(StockMovement movement, int index) {
     final rawId = movement.id.trim();
     final stableId = rawId.isNotEmpty ? rawId : 'missing';
@@ -361,6 +519,16 @@ class _DashboardScreenState extends State<DashboardScreen> {
                 final visitsSeries = _buildVisitsSeries(
                   days: _selectedVisitsWindowDays,
                 );
+                final now = DateTime.now();
+                final today = DateTime(now.year, now.month, now.day);
+                final yesterday = today.subtract(const Duration(days: 1));
+                final todayStats = _dayStats(inventory, today);
+                final yesterdayStats = _dayStats(inventory, yesterday);
+                final bestSeller = _bestSeller(inventory);
+                final lastSale = _lastSale(inventory);
+                final outOfStockCount = inventory.products
+                    .where((p) => inventory.effectiveStock(p) <= 0)
+                    .length;
 
                 return SingleChildScrollView(
                   padding: EdgeInsets.fromLTRB(
@@ -388,33 +556,129 @@ class _DashboardScreenState extends State<DashboardScreen> {
                               ? (constraints.maxWidth - 32) / 3
                               : constraints.maxWidth;
 
-                          return Wrap(
-                            spacing: 16,
-                            runSpacing: 16,
+                          return Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
-                              StatCard(
-                                width: cardWidth,
-                                title: 'Produits au total',
-                                value: inventory.totalProducts.toString(),
-                                icon: Icons.inventory_2_rounded,
-                                accent: AppColors.primary,
+                              const SectionTitle(title: 'Aujourd\'hui'),
+                              const SizedBox(height: 12),
+                              Wrap(
+                                spacing: 16,
+                                runSpacing: 16,
+                                children: [
+                                  StatCard(
+                                    width: cardWidth,
+                                    icon: Icons.receipt_long,
+                                    title: 'Ventes du jour',
+                                    value: todayStats.salesCount.toString(),
+                                    accent: AppColors.primary,
+                                    trendPercent: _trendPercent(
+                                      todayStats.salesCount,
+                                      yesterdayStats.salesCount,
+                                    ),
+                                    comparisonLabel: 'Compare a hier',
+                                    sparklineData: _salesCountSeries(
+                                      inventory,
+                                      days: 7,
+                                    ),
+                                  ),
+                                  StatCard(
+                                    width: cardWidth,
+                                    icon: Icons.trending_up,
+                                    title: 'Revenus du jour',
+                                    value: formatMoneyByCurrency(
+                                      todayStats.revenueByCurrency,
+                                    ),
+                                    accent: AppColors.success,
+                                    trendPercent: _trendPercent(
+                                      _totalRevenue(
+                                        todayStats.revenueByCurrency,
+                                      ),
+                                      _totalRevenue(
+                                        yesterdayStats.revenueByCurrency,
+                                      ),
+                                    ),
+                                    comparisonLabel: 'Compare a hier',
+                                    sparklineData: salesSeries
+                                        .map((p) => p.amount)
+                                        .toList(),
+                                  ),
+                                  StatCard(
+                                    width: cardWidth,
+                                    icon: Icons.shopping_bag_outlined,
+                                    title: 'Articles vendus',
+                                    value: todayStats.unitsSold.toString(),
+                                    accent: AppColors.warning,
+                                    trendPercent: _trendPercent(
+                                      todayStats.unitsSold,
+                                      yesterdayStats.unitsSold,
+                                    ),
+                                    comparisonLabel: 'Compare a hier',
+                                    sparklineData: _unitsSoldSeries(
+                                      inventory,
+                                      days: 7,
+                                    ),
+                                  ),
+                                ],
                               ),
-                              StatCard(
-                                width: cardWidth,
-                                title: 'Stock faible',
-                                value: inventory.lowStockProducts.length
-                                    .toString(),
-                                icon: Icons.warning_amber_rounded,
-                                accent: AppColors.warning,
-                              ),
-                              StatCard(
-                                width: cardWidth,
-                                title: 'Valeur du stock',
-                                value: formatMoneyByCurrency(
-                                  inventory.totalStockValueByCurrency,
-                                ),
-                                icon: Icons.account_balance_wallet_rounded,
-                                accent: AppColors.success,
+                              const SizedBox(height: 24),
+                              const SectionTitle(title: 'Vue d\'ensemble'),
+                              const SizedBox(height: 12),
+                              Wrap(
+                                spacing: 16,
+                                runSpacing: 16,
+                                children: [
+                                  StatCard(
+                                    width: cardWidth,
+                                    title: 'Produits au total',
+                                    value: inventory.totalProducts.toString(),
+                                    icon: Icons.inventory_2_rounded,
+                                    accent: AppColors.primary,
+                                  ),
+                                  StatCard(
+                                    width: cardWidth,
+                                    title: 'Stock faible',
+                                    value: inventory.lowStockProducts.length
+                                        .toString(),
+                                    icon: Icons.warning_amber_rounded,
+                                    accent: AppColors.warning,
+                                  ),
+                                  StatCard(
+                                    width: cardWidth,
+                                    title: 'Produits en rupture',
+                                    value: outOfStockCount.toString(),
+                                    icon: Icons.remove_shopping_cart_outlined,
+                                    accent: AppColors.danger,
+                                  ),
+                                  StatCard(
+                                    width: cardWidth,
+                                    title: 'Valeur du stock',
+                                    value: formatMoneyByCurrency(
+                                      inventory.totalStockValueByCurrency,
+                                    ),
+                                    icon: Icons.account_balance_wallet_rounded,
+                                    accent: AppColors.success,
+                                  ),
+                                  StatCard(
+                                    width: cardWidth,
+                                    title: 'Meilleure vente',
+                                    value: bestSeller == null
+                                        ? 'Aucune vente'
+                                        : '${bestSeller.name} (${bestSeller.quantity}x)',
+                                    icon: Icons.star_outline_rounded,
+                                    accent: AppColors.primary,
+                                  ),
+                                  StatCard(
+                                    width: cardWidth,
+                                    title: 'Derniere vente',
+                                    value: lastSale == null
+                                        ? 'Aucune vente'
+                                        : inventory.productNameFor(
+                                            lastSale.productId,
+                                          ),
+                                    icon: Icons.history_rounded,
+                                    accent: AppColors.primary,
+                                  ),
+                                ],
                               ),
                             ],
                           );
@@ -476,6 +740,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                                   children: [
                                     DropdownButtonFormField<String>(
                                       value: selectedRecentMovementOptionKey,
+                                      isExpanded: true,
                                       decoration: const InputDecoration(
                                         labelText: 'Choisir une activite',
                                         prefixIcon: Icon(Icons.history),
@@ -601,161 +866,164 @@ class _VisitsChartCard extends StatelessWidget {
       child: CustomCard(
         padding: const EdgeInsets.all(18),
         child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            children: [
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    const Text(
-                      'Visites clients (services)',
-                      style: TextStyle(
-                        fontSize: 18,
-                        fontWeight: FontWeight.w800,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      const Text(
+                        'Visites clients (services)',
+                        style: TextStyle(
+                          fontSize: 18,
+                          fontWeight: FontWeight.w800,
+                        ),
                       ),
-                    ),
-                    const SizedBox(height: 4),
-                    Text(
-                      'Evolution des tickets services effectues.',
-                      style: TextStyle(color: colorScheme.onSurfaceVariant),
-                    ),
-                  ],
-                ),
-              ),
-              const SizedBox(width: 10),
-              _PeriodChip(
-                label: '7j',
-                selected: days == 7,
-                onTap: () => onDaysChanged(7),
-              ),
-              const SizedBox(width: 6),
-              _PeriodChip(
-                label: '30j',
-                selected: days == 30,
-                onTap: () => onDaysChanged(30),
-              ),
-              const SizedBox(width: 6),
-              _PeriodChip(
-                label: '90j',
-                selected: days == 90,
-                onTap: () => onDaysChanged(90),
-              ),
-              const SizedBox(width: 8),
-              Container(
-                padding: const EdgeInsets.symmetric(
-                  horizontal: 12,
-                  vertical: 8,
-                ),
-                decoration: BoxDecoration(
-                  color: colorScheme.tertiaryContainer,
-                  borderRadius: BorderRadius.circular(999),
-                ),
-                child: Text(
-                  '$totalVisits visites',
-                  style: TextStyle(
-                    color: colorScheme.onTertiaryContainer,
-                    fontWeight: FontWeight.w800,
+                      const SizedBox(height: 4),
+                      Text(
+                        'Evolution des tickets services effectues.',
+                        style: TextStyle(color: colorScheme.onSurfaceVariant),
+                      ),
+                    ],
                   ),
                 ),
-              ),
-            ],
-          ),
-          const SizedBox(height: 16),
-          if (isLoading)
-            const SizedBox(
-              height: 160,
-              child: Center(child: CircularProgressIndicator()),
-            )
-          else if (error != null)
-            SizedBox(
-              height: 160,
-              child: Center(
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Text(error!),
-                    const SizedBox(height: 10),
-                    FilledButton(
-                      onPressed: onRetry,
-                      child: const Text('Reessayer'),
+                const SizedBox(width: 10),
+                _PeriodChip(
+                  label: '7j',
+                  selected: days == 7,
+                  onTap: () => onDaysChanged(7),
+                ),
+                const SizedBox(width: 6),
+                _PeriodChip(
+                  label: '30j',
+                  selected: days == 30,
+                  onTap: () => onDaysChanged(30),
+                ),
+                const SizedBox(width: 6),
+                _PeriodChip(
+                  label: '90j',
+                  selected: days == 90,
+                  onTap: () => onDaysChanged(90),
+                ),
+                const SizedBox(width: 8),
+                Container(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 12,
+                    vertical: 8,
+                  ),
+                  decoration: BoxDecoration(
+                    color: colorScheme.tertiaryContainer,
+                    borderRadius: BorderRadius.circular(999),
+                  ),
+                  child: Text(
+                    '$totalVisits visites',
+                    style: TextStyle(
+                      color: colorScheme.onTertiaryContainer,
+                      fontWeight: FontWeight.w800,
                     ),
-                  ],
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 16),
+            if (isLoading)
+              const SizedBox(
+                height: 160,
+                child: Center(child: CircularProgressIndicator()),
+              )
+            else if (error != null)
+              SizedBox(
+                height: 160,
+                child: Center(
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Text(error!),
+                      const SizedBox(height: 10),
+                      FilledButton(
+                        onPressed: onRetry,
+                        child: const Text('Reessayer'),
+                      ),
+                    ],
+                  ),
+                ),
+              )
+            else
+              SizedBox(
+                height: 196,
+                child: LayoutBuilder(
+                  builder: (context, constraints) {
+                    const reservedHeight = 56.0;
+                    final maxBarHeight =
+                        (constraints.maxHeight - reservedHeight).clamp(
+                          10.0,
+                          constraints.maxHeight,
+                        );
+                    final safeMax = maxVisits <= 0 ? 1 : maxVisits;
+
+                    return Row(
+                      crossAxisAlignment: CrossAxisAlignment.end,
+                      children: points.map((point) {
+                        final ratio = (point.visits / safeMax).clamp(0.0, 1.0);
+                        final barHeight = ratio == 0
+                            ? 4.0
+                            : (ratio * maxBarHeight);
+
+                        return Expanded(
+                          child: Padding(
+                            padding: const EdgeInsets.symmetric(horizontal: 4),
+                            child: Column(
+                              mainAxisAlignment: MainAxisAlignment.end,
+                              children: [
+                                Text(
+                                  point.visits.toString(),
+                                  style: TextStyle(
+                                    fontSize: 11,
+                                    color: colorScheme.onSurfaceVariant,
+                                  ),
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
+                                ),
+                                const SizedBox(height: 6),
+                                AnimatedContainer(
+                                  duration: const Duration(milliseconds: 350),
+                                  curve: Curves.easeOutCubic,
+                                  height: barHeight,
+                                  decoration: BoxDecoration(
+                                    gradient: const LinearGradient(
+                                      colors: [
+                                        Color(0xFF86EFAC),
+                                        Color(0xFF16A34A),
+                                      ],
+                                      begin: Alignment.topCenter,
+                                      end: Alignment.bottomCenter,
+                                    ),
+                                    borderRadius: BorderRadius.circular(10),
+                                  ),
+                                ),
+                                const SizedBox(height: 8),
+                                Text(
+                                  point.label,
+                                  style: TextStyle(
+                                    fontSize: 11,
+                                    fontWeight: FontWeight.w700,
+                                    color: colorScheme.onSurfaceVariant,
+                                  ),
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
+                                ),
+                              ],
+                            ),
+                          ),
+                        );
+                      }).toList(),
+                    );
+                  },
                 ),
               ),
-            )
-          else
-            SizedBox(
-              height: 196,
-              child: LayoutBuilder(
-                builder: (context, constraints) {
-                  const reservedHeight = 56.0;
-                  final maxBarHeight = (constraints.maxHeight - reservedHeight)
-                      .clamp(10.0, constraints.maxHeight);
-                  final safeMax = maxVisits <= 0 ? 1 : maxVisits;
-
-                  return Row(
-                    crossAxisAlignment: CrossAxisAlignment.end,
-                    children: points.map((point) {
-                      final ratio = (point.visits / safeMax).clamp(0.0, 1.0);
-                      final barHeight = ratio == 0
-                          ? 4.0
-                          : (ratio * maxBarHeight);
-
-                      return Expanded(
-                        child: Padding(
-                          padding: const EdgeInsets.symmetric(horizontal: 4),
-                          child: Column(
-                            mainAxisAlignment: MainAxisAlignment.end,
-                            children: [
-                              Text(
-                                point.visits.toString(),
-                                style: TextStyle(
-                                  fontSize: 11,
-                                  color: colorScheme.onSurfaceVariant,
-                                ),
-                                maxLines: 1,
-                                overflow: TextOverflow.ellipsis,
-                              ),
-                              const SizedBox(height: 6),
-                              AnimatedContainer(
-                                duration: const Duration(milliseconds: 350),
-                                curve: Curves.easeOutCubic,
-                                height: barHeight,
-                                decoration: BoxDecoration(
-                                  gradient: const LinearGradient(
-                                    colors: [
-                                      Color(0xFF86EFAC),
-                                      Color(0xFF16A34A),
-                                    ],
-                                    begin: Alignment.topCenter,
-                                    end: Alignment.bottomCenter,
-                                  ),
-                                  borderRadius: BorderRadius.circular(10),
-                                ),
-                              ),
-                              const SizedBox(height: 8),
-                              Text(
-                                point.label,
-                                style: TextStyle(
-                                  fontSize: 11,
-                                  fontWeight: FontWeight.w700,
-                                  color: colorScheme.onSurfaceVariant,
-                                ),
-                                maxLines: 1,
-                                overflow: TextOverflow.ellipsis,
-                              ),
-                            ],
-                          ),
-                        ),
-                      );
-                    }).toList(),
-                  );
-                },
-              ),
-            ),
-        ],
+          ],
         ),
       ),
     );
@@ -790,142 +1058,146 @@ class _SalesChartCard extends StatelessWidget {
       child: CustomCard(
         padding: const EdgeInsets.all(18),
         child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            children: [
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    const Text(
-                      'Ventes',
-                      style: TextStyle(
-                        fontSize: 18,
-                        fontWeight: FontWeight.w800,
-                      ),
-                    ),
-                    const SizedBox(height: 4),
-                    Text(
-                      'Evolution quotidienne des sorties.',
-                      style: TextStyle(color: colorScheme.onSurfaceVariant),
-                    ),
-                  ],
-                ),
-              ),
-              const SizedBox(width: 10),
-              _PeriodChip(
-                label: '7j',
-                selected: days == 7,
-                onTap: () => onDaysChanged(7),
-              ),
-              const SizedBox(width: 6),
-              _PeriodChip(
-                label: '30j',
-                selected: days == 30,
-                onTap: () => onDaysChanged(30),
-              ),
-              const SizedBox(width: 6),
-              _PeriodChip(
-                label: '90j',
-                selected: days == 90,
-                onTap: () => onDaysChanged(90),
-              ),
-              const SizedBox(width: 8),
-              Container(
-                padding: const EdgeInsets.symmetric(
-                  horizontal: 12,
-                  vertical: 8,
-                ),
-                decoration: BoxDecoration(
-                  color: colorScheme.primaryContainer,
-                  borderRadius: BorderRadius.circular(999),
-                ),
-                child: Text(
-                  totalsByCurrency.isEmpty
-                      ? '0 HTG'
-                      : totalsByCurrency.entries
-                            .map((e) => '${_compact(e.value)} ${e.key}')
-                            .join(' + '),
-                  style: TextStyle(
-                    color: colorScheme.onPrimaryContainer,
-                    fontWeight: FontWeight.w800,
-                  ),
-                ),
-              ),
-            ],
-          ),
-          const SizedBox(height: 16),
-          SizedBox(
-            height: 196,
-            child: LayoutBuilder(
-              builder: (context, constraints) {
-                // Reserve de la place pour les labels haut/bas afin d'eviter
-                // tout overflow vertical quand la barre atteint son maximum.
-                const reservedHeight = 56.0;
-                final maxBarHeight = (constraints.maxHeight - reservedHeight)
-                    .clamp(10.0, constraints.maxHeight);
-                final safeMax = maxAmount <= 0 ? 1.0 : maxAmount;
-
-                return Row(
-                  crossAxisAlignment: CrossAxisAlignment.end,
-                  children: points.map((point) {
-                    final ratio = (point.amount / safeMax).clamp(0.0, 1.0);
-                    final barHeight = ratio == 0 ? 4.0 : (ratio * maxBarHeight);
-
-                    return Expanded(
-                      child: Padding(
-                        padding: const EdgeInsets.symmetric(horizontal: 4),
-                        child: Column(
-                          mainAxisAlignment: MainAxisAlignment.end,
-                          children: [
-                            Text(
-                              point.amount <= 0 ? '0' : _compact(point.amount),
-                              style: TextStyle(
-                                fontSize: 11,
-                                color: colorScheme.onSurfaceVariant,
-                              ),
-                              maxLines: 1,
-                              overflow: TextOverflow.ellipsis,
-                            ),
-                            const SizedBox(height: 6),
-                            AnimatedContainer(
-                              duration: const Duration(milliseconds: 350),
-                              curve: Curves.easeOutCubic,
-                              height: barHeight,
-                              decoration: BoxDecoration(
-                                gradient: const LinearGradient(
-                                  colors: [
-                                    Color(0xFF25B6C6),
-                                    Color(0xFF0C7EA5),
-                                  ],
-                                  begin: Alignment.topCenter,
-                                  end: Alignment.bottomCenter,
-                                ),
-                                borderRadius: BorderRadius.circular(10),
-                              ),
-                            ),
-                            const SizedBox(height: 8),
-                            Text(
-                              point.label,
-                              style: TextStyle(
-                                fontSize: 11,
-                                fontWeight: FontWeight.w700,
-                                color: colorScheme.onSurfaceVariant,
-                              ),
-                              maxLines: 1,
-                              overflow: TextOverflow.ellipsis,
-                            ),
-                          ],
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      const Text(
+                        'Ventes',
+                        style: TextStyle(
+                          fontSize: 18,
+                          fontWeight: FontWeight.w800,
                         ),
                       ),
-                    );
-                  }).toList(),
-                );
-              },
+                      const SizedBox(height: 4),
+                      Text(
+                        'Evolution quotidienne des sorties.',
+                        style: TextStyle(color: colorScheme.onSurfaceVariant),
+                      ),
+                    ],
+                  ),
+                ),
+                const SizedBox(width: 10),
+                _PeriodChip(
+                  label: '7j',
+                  selected: days == 7,
+                  onTap: () => onDaysChanged(7),
+                ),
+                const SizedBox(width: 6),
+                _PeriodChip(
+                  label: '30j',
+                  selected: days == 30,
+                  onTap: () => onDaysChanged(30),
+                ),
+                const SizedBox(width: 6),
+                _PeriodChip(
+                  label: '90j',
+                  selected: days == 90,
+                  onTap: () => onDaysChanged(90),
+                ),
+                const SizedBox(width: 8),
+                Container(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 12,
+                    vertical: 8,
+                  ),
+                  decoration: BoxDecoration(
+                    color: colorScheme.primaryContainer,
+                    borderRadius: BorderRadius.circular(999),
+                  ),
+                  child: Text(
+                    totalsByCurrency.isEmpty
+                        ? '0 HTG'
+                        : totalsByCurrency.entries
+                              .map((e) => '${_compact(e.value)} ${e.key}')
+                              .join(' + '),
+                    style: TextStyle(
+                      color: colorScheme.onPrimaryContainer,
+                      fontWeight: FontWeight.w800,
+                    ),
+                  ),
+                ),
+              ],
             ),
-          ),
-        ],
+            const SizedBox(height: 16),
+            SizedBox(
+              height: 196,
+              child: LayoutBuilder(
+                builder: (context, constraints) {
+                  // Reserve de la place pour les labels haut/bas afin d'eviter
+                  // tout overflow vertical quand la barre atteint son maximum.
+                  const reservedHeight = 56.0;
+                  final maxBarHeight = (constraints.maxHeight - reservedHeight)
+                      .clamp(10.0, constraints.maxHeight);
+                  final safeMax = maxAmount <= 0 ? 1.0 : maxAmount;
+
+                  return Row(
+                    crossAxisAlignment: CrossAxisAlignment.end,
+                    children: points.map((point) {
+                      final ratio = (point.amount / safeMax).clamp(0.0, 1.0);
+                      final barHeight = ratio == 0
+                          ? 4.0
+                          : (ratio * maxBarHeight);
+
+                      return Expanded(
+                        child: Padding(
+                          padding: const EdgeInsets.symmetric(horizontal: 4),
+                          child: Column(
+                            mainAxisAlignment: MainAxisAlignment.end,
+                            children: [
+                              Text(
+                                point.amount <= 0
+                                    ? '0'
+                                    : _compact(point.amount),
+                                style: TextStyle(
+                                  fontSize: 11,
+                                  color: colorScheme.onSurfaceVariant,
+                                ),
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                              ),
+                              const SizedBox(height: 6),
+                              AnimatedContainer(
+                                duration: const Duration(milliseconds: 350),
+                                curve: Curves.easeOutCubic,
+                                height: barHeight,
+                                decoration: BoxDecoration(
+                                  gradient: const LinearGradient(
+                                    colors: [
+                                      Color(0xFF25B6C6),
+                                      Color(0xFF0C7EA5),
+                                    ],
+                                    begin: Alignment.topCenter,
+                                    end: Alignment.bottomCenter,
+                                  ),
+                                  borderRadius: BorderRadius.circular(10),
+                                ),
+                              ),
+                              const SizedBox(height: 8),
+                              Text(
+                                point.label,
+                                style: TextStyle(
+                                  fontSize: 11,
+                                  fontWeight: FontWeight.w700,
+                                  color: colorScheme.onSurfaceVariant,
+                                ),
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                              ),
+                            ],
+                          ),
+                        ),
+                      );
+                    }).toList(),
+                  );
+                },
+              ),
+            ),
+          ],
         ),
       ),
     );
@@ -1006,13 +1278,14 @@ class _DashboardHero extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final colorScheme = Theme.of(context).colorScheme;
     return Container(
       width: double.infinity,
       padding: const EdgeInsets.all(24),
       decoration: BoxDecoration(
-        color: Colors.white,
+        color: colorScheme.surface,
         borderRadius: AppRadius.cardAll,
-        border: Border.all(color: AppColors.border),
+        border: Border.all(color: colorScheme.outlineVariant),
         boxShadow: [
           BoxShadow(
             color: Colors.black.withValues(alpha: 0.05),
@@ -1032,11 +1305,14 @@ class _DashboardHero extends StatelessWidget {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text('Dashboard inventaire', style: AppTypography.pageTitle()),
+                Text(
+                  'Dashboard inventaire',
+                  style: AppTypography.pageTitle(context),
+                ),
                 const SizedBox(height: 8),
                 Text(
                   'Suivez vos stocks, detectez les alertes et pilotez les mouvements en temps reel.',
-                  style: AppTypography.small(color: AppColors.textSecondary),
+                  style: AppTypography.small(context),
                 ),
                 const SizedBox(height: 14),
                 _AnimatedCompanyName(name: companyName),
@@ -1202,4 +1478,3 @@ class _ActivityTile extends StatelessWidget {
     return '$d/$m/$y $h:$min';
   }
 }
-

@@ -1,6 +1,5 @@
 import 'package:flutter/material.dart';
 
-import '../../core/theme/app_colors.dart';
 import '../../core/theme/app_radius.dart';
 
 /// Item de navigation partage entre AppSidebar et AppDrawer: etat actif =
@@ -30,10 +29,11 @@ class _SideMenuItemState extends State<SideMenuItem> {
 
   @override
   Widget build(BuildContext context) {
-    final color = widget.selected ? AppColors.primary : AppColors.textSecondary;
+    final colorScheme = Theme.of(context).colorScheme;
+    final color = widget.selected ? colorScheme.primary : colorScheme.onSurfaceVariant;
     final background = widget.selected
-        ? AppColors.primary.withValues(alpha: 0.10)
-        : (_hovered ? AppColors.primary.withValues(alpha: 0.04) : Colors.transparent);
+        ? colorScheme.primary.withValues(alpha: 0.10)
+        : (_hovered ? colorScheme.primary.withValues(alpha: 0.04) : Colors.transparent);
 
     return MouseRegion(
       cursor: SystemMouseCursors.click,
@@ -64,7 +64,7 @@ class _SideMenuItemState extends State<SideMenuItem> {
                       style: TextStyle(
                         fontSize: 14,
                         fontWeight: widget.selected ? FontWeight.w600 : FontWeight.w500,
-                        color: widget.selected ? AppColors.textPrimary : color,
+                        color: widget.selected ? colorScheme.onSurface : color,
                       ),
                     ),
                   ),

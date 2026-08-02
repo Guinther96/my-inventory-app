@@ -108,6 +108,7 @@ class _InventoryScreenState extends State<InventoryScreen> {
                               const SizedBox(height: 12),
                               DropdownButtonFormField<String>(
                                 value: _selectedProductId,
+                                isExpanded: true,
                                 decoration: const InputDecoration(
                                   labelText: 'Produit',
                                 ),
@@ -117,6 +118,8 @@ class _InventoryScreenState extends State<InventoryScreen> {
                                         value: p.id,
                                         child: Text(
                                           '${p.name} (Stock: ${p.quantityInStock})',
+                                          overflow: TextOverflow.ellipsis,
+                                          maxLines: 1,
                                         ),
                                       ),
                                     )

@@ -364,19 +364,26 @@ class CategoriesScreen extends StatelessWidget {
                         else
                           DropdownButtonFormField<String?>(
                             value: selectedParentValue,
+                            isExpanded: true,
                             decoration: const InputDecoration(
                               labelText: 'Categorie parent',
                             ),
                             items: <DropdownMenuItem<String?>>[
                               const DropdownMenuItem<String?>(
                                 value: null,
-                                child: Text('Aucune (categorie racine)'),
+                                child: Text(
+                                  'Aucune (categorie racine)',
+                                  overflow: TextOverflow.ellipsis,
+                                  maxLines: 1,
+                                ),
                               ),
                               ...parentCandidates.map(
                                 (candidate) => DropdownMenuItem<String?>(
                                   value: candidate.id,
                                   child: Text(
                                     _categoryPathLabel(candidate, allById),
+                                    overflow: TextOverflow.ellipsis,
+                                    maxLines: 1,
                                   ),
                                 ),
                               ),
@@ -410,23 +417,51 @@ class CategoriesScreen extends StatelessWidget {
                                     return;
                                   }
 
-                                  final now = DateTime.now();
-                                  await inventory.addOrUpdateCategory(
-                                    Category(
-                                      id:
-                                          category?.id ?? '',
-                                      name: name,
-                                      description:
-                                          descController.text.trim().isEmpty
-                                          ? null
-                                          : descController.text.trim(),
-                                      parentId: selectedParentId,
-                                      createdAt: category?.createdAt ?? now,
-                                    ),
-                                  );
+                                  // Meme garde-fou que selectedParentValue
+                                  // (affichage): la categorie parent choisie
+                                  // peut avoir ete supprimee entre-temps. On
+                                  // n'envoie jamais un parent_id qui n'existe
+                                  // plus, sinon la sauvegarde echoue avec une
+                                  // erreur de contrainte de cle etrangere.
+                                  final safeParentId =
+                                      selectedParentId != null &&
+                                          parentIds.contains(selectedParentId)
+                                      ? selectedParentId
+                                      : null;
 
-                                  if (context.mounted) {
-                                    Navigator.pop(context);
+                                  final now = DateTime.now();
+                                  try {
+                                    await inventory.addOrUpdateCategory(
+                                      Category(
+                                        id: category?.id ?? '',
+                                        name: name,
+                                        description:
+                                            descController.text.trim().isEmpty
+                                            ? null
+                                            : descController.text.trim(),
+                                        parentId: safeParentId,
+                                        createdAt: category?.createdAt ?? now,
+                                      ),
+                                    );
+
+                                    if (context.mounted) {
+                                      Navigator.pop(context);
+                                    }
+                                  } catch (e) {
+                                    if (context.mounted) {
+                                      ScaffoldMessenger.of(
+                                        context,
+                                      ).showSnackBar(
+                                        SnackBar(
+                                          content: Text(
+                                            e.toString().replaceFirst(
+                                              'Exception: ',
+                                              '',
+                                            ),
+                                          ),
+                                        ),
+                                      );
+                                    }
                                   }
                                 },
                                 child: const Text('Enregistrer'),

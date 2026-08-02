@@ -501,6 +501,7 @@ class _CreateServiceOrderScreenState extends State<CreateServiceOrderScreen> {
                             children: [
                               DropdownButtonFormField<Client>(
                                 initialValue: selectedClientValue,
+                                isExpanded: true,
                                 decoration: const InputDecoration(
                                   labelText: 'Client existant (optionnel)',
                                 ),
@@ -508,7 +509,11 @@ class _CreateServiceOrderScreenState extends State<CreateServiceOrderScreen> {
                                     .map(
                                       (client) => DropdownMenuItem<Client>(
                                         value: client,
-                                        child: Text(client.fullName),
+                                        child: Text(
+                                          client.fullName,
+                                          overflow: TextOverflow.ellipsis,
+                                          maxLines: 1,
+                                        ),
                                       ),
                                     )
                                     .toList(),
@@ -662,6 +667,7 @@ class _CreateServiceOrderScreenState extends State<CreateServiceOrderScreen> {
                                             const SizedBox(height: 12),
                                             DropdownButtonFormField<String?>(
                                               value: line.providerId,
+                                              isExpanded: true,
                                               hint: const Text('Selectioner le prestataire'),
                                               decoration: const InputDecoration(
                                                 labelText: 'Prestataire',
@@ -679,6 +685,8 @@ class _CreateServiceOrderScreenState extends State<CreateServiceOrderScreen> {
                                                       value: provider.id,
                                                       child: Text(
                                                         provider.email,
+                                                        overflow: TextOverflow.ellipsis,
+                                                        maxLines: 1,
                                                       ),
                                                     ),
                                                   )

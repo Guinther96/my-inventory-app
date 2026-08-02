@@ -20,7 +20,8 @@ class StatusBadge extends StatelessWidget {
     this.icon,
   });
 
-  Color _colorFor(StatusBadgeType type) {
+  Color _colorFor(BuildContext context, StatusBadgeType type) {
+    final colorScheme = Theme.of(context).colorScheme;
     switch (type) {
       case StatusBadgeType.success:
         return AppColors.success;
@@ -29,15 +30,15 @@ class StatusBadge extends StatelessWidget {
       case StatusBadgeType.danger:
         return AppColors.danger;
       case StatusBadgeType.info:
-        return AppColors.primary;
+        return colorScheme.primary;
       case StatusBadgeType.neutral:
-        return AppColors.textSecondary;
+        return colorScheme.onSurfaceVariant;
     }
   }
 
   @override
   Widget build(BuildContext context) {
-    final color = _colorFor(type);
+    final color = _colorFor(context, type);
 
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),

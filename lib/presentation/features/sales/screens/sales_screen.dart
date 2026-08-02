@@ -1152,11 +1152,11 @@ class _PosHeader extends StatelessWidget {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Text('Mode caisse', style: AppTypography.pageTitle()),
+        Text('Mode caisse', style: AppTypography.pageTitle(context)),
         const SizedBox(height: 6),
         Text(
           'Un ecran de vente rapide, visuel et adapte a votre gestion de stock.',
-          style: AppTypography.small(color: AppColors.textSecondary),
+          style: AppTypography.small(context),
         ),
         const SizedBox(height: 18),
         Wrap(

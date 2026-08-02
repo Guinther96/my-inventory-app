@@ -2,7 +2,6 @@ import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:provider/provider.dart';
 
-import '../../core/theme/app_colors.dart';
 import '../../data/providers/feature_access_provider.dart';
 import '../../data/providers/user_profile_provider.dart';
 import '../features/reports/screens/user_roles_screen.dart';
@@ -27,6 +26,7 @@ class AppDrawer extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final colorScheme = Theme.of(context).colorScheme;
     final currentRoute = GoRouterState.of(context).uri.toString();
     final profile = context.watch<UserProfileProvider>();
     final featureAccess = context.watch<FeatureAccessProvider>();
@@ -35,7 +35,7 @@ class AppDrawer extends StatelessWidget {
     final initial = email.isNotEmpty ? email[0].toUpperCase() : '?';
 
     return Drawer(
-      backgroundColor: Colors.white,
+      backgroundColor: colorScheme.surface,
       child: SafeArea(
         child: Column(
           children: [
@@ -47,7 +47,7 @@ class AppDrawer extends StatelessWidget {
                     width: 40,
                     height: 40,
                     decoration: BoxDecoration(
-                      color: AppColors.primary,
+                      color: colorScheme.primary,
                       borderRadius: BorderRadius.circular(12),
                     ),
                     alignment: Alignment.center,
@@ -57,7 +57,7 @@ class AppDrawer extends StatelessWidget {
                     ),
                   ),
                   const SizedBox(width: 12),
-                  const Expanded(
+                  Expanded(
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
@@ -66,7 +66,7 @@ class AppDrawer extends StatelessWidget {
                           style: TextStyle(
                             fontSize: 18,
                             fontWeight: FontWeight.w700,
-                            color: AppColors.textPrimary,
+                            color: colorScheme.onSurface,
                           ),
                         ),
                         Text(
@@ -74,7 +74,7 @@ class AppDrawer extends StatelessWidget {
                           style: TextStyle(
                             fontSize: 12,
                             fontWeight: FontWeight.w500,
-                            color: AppColors.textSecondary,
+                            color: colorScheme.onSurfaceVariant,
                           ),
                         ),
                       ],
@@ -180,19 +180,19 @@ class AppDrawer extends StatelessWidget {
               margin: const EdgeInsets.all(12),
               padding: const EdgeInsets.all(10),
               decoration: BoxDecoration(
-                color: const Color(0xFFF8FAFC),
+                color: colorScheme.surfaceContainerHighest,
                 borderRadius: BorderRadius.circular(14),
-                border: Border.all(color: AppColors.border),
+                border: Border.all(color: colorScheme.outlineVariant),
               ),
               child: Row(
                 children: [
                   CircleAvatar(
                     radius: 16,
-                    backgroundColor: AppColors.primary.withValues(alpha: 0.12),
+                    backgroundColor: colorScheme.primary.withValues(alpha: 0.12),
                     child: Text(
                       initial,
-                      style: const TextStyle(
-                        color: AppColors.primary,
+                      style: TextStyle(
+                        color: colorScheme.primary,
                         fontWeight: FontWeight.w700,
                         fontSize: 13,
                       ),
@@ -204,10 +204,10 @@ class AppDrawer extends StatelessWidget {
                       email.isEmpty ? 'Utilisateur' : email,
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
-                      style: const TextStyle(
+                      style: TextStyle(
                         fontSize: 13,
                         fontWeight: FontWeight.w600,
-                        color: AppColors.textPrimary,
+                        color: colorScheme.onSurface,
                       ),
                     ),
                   ),

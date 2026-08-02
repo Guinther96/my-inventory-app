@@ -271,6 +271,7 @@ class _ServicesManagementScreenState extends State<ServicesManagementScreen> {
                     const SizedBox(height: 10),
                     DropdownButtonFormField<String?>(
                       value: selectedCategoryId,
+                      isExpanded: true,
                       decoration: const InputDecoration(
                         labelText: 'Categorie *',
                       ),
@@ -278,12 +279,20 @@ class _ServicesManagementScreenState extends State<ServicesManagementScreen> {
                         if (allowUncategorized)
                           const DropdownMenuItem<String?>(
                             value: null,
-                            child: Text('Sans categorie (existant)'),
+                            child: Text(
+                              'Sans categorie (existant)',
+                              overflow: TextOverflow.ellipsis,
+                              maxLines: 1,
+                            ),
                           ),
                         ..._categories.map(
                           (c) => DropdownMenuItem<String?>(
                             value: c.id,
-                            child: Text(c.name),
+                            child: Text(
+                              c.name,
+                              overflow: TextOverflow.ellipsis,
+                              maxLines: 1,
+                            ),
                           ),
                         ),
                       ],

@@ -1,6 +1,5 @@
 import 'package:flutter/material.dart';
 
-import '../../core/theme/app_colors.dart';
 import '../../core/theme/app_radius.dart';
 
 enum CustomButtonVariant { primary, secondary }
@@ -40,20 +39,27 @@ class _CustomButtonState extends State<CustomButton> {
   Widget build(BuildContext context) {
     final colorScheme = Theme.of(context).colorScheme;
 
+    // Survol: leger assombrissement de la primary courante (fonctionne aussi
+    // bien pour le bleu clair que pour le bleu plus lumineux du mode sombre).
+    final hoverPrimary = Color.alphaBlend(
+      Colors.black.withValues(alpha: 0.10),
+      colorScheme.primary,
+    );
+
     final backgroundColor = !_enabled
         ? (_isPrimary
-              ? AppColors.primary.withValues(alpha: 0.4)
+              ? colorScheme.primary.withValues(alpha: 0.4)
               : colorScheme.surface)
         : _isPrimary
-        ? (_hovered ? AppColors.primaryHover : AppColors.primary)
+        ? (_hovered ? hoverPrimary : colorScheme.primary)
         : colorScheme.surface;
 
-    final foregroundColor = _isPrimary ? Colors.white : AppColors.textPrimary;
+    final foregroundColor = _isPrimary ? Colors.white : colorScheme.onSurface;
 
     final border = _isPrimary
         ? null
         : Border.all(
-            color: _hovered ? AppColors.primary : colorScheme.outlineVariant,
+            color: _hovered ? colorScheme.primary : colorScheme.outlineVariant,
           );
 
     final content = Row(
@@ -100,7 +106,7 @@ class _CustomButtonState extends State<CustomButton> {
               boxShadow: _isPrimary && _enabled
                   ? [
                       BoxShadow(
-                        color: AppColors.primary.withValues(
+                        color: colorScheme.primary.withValues(
                           alpha: _hovered ? 0.32 : 0.22,
                         ),
                         blurRadius: _hovered ? 18 : 12,
